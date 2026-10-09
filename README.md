@@ -10,6 +10,11 @@ Status: just started. The to-do list is the repo's GitHub Issues.
 
 Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 
+## Backtesting
+
+`backtest/` is a Python backtester that reads `data/radar.db` and
+`radar.toml`; see [backtest/README.md](backtest/README.md).
+
 ## Environment variables
 
 Every new one gets listed here.

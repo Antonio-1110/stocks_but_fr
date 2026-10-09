@@ -1,0 +1,19 @@
+[project]
+name = "radar-backtest"
+version = "0.1.0"
+description = "Backtester for the radar: reads data/radar.db and radar.toml"
+requires-python = ">=3.11"
+dependencies = ["pandas>=2.0", "numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["radar_backtest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

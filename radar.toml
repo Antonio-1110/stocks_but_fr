@@ -21,5 +21,8 @@ benchmark = "0050"
 design_start = "2012-01-01"    # rules are tuned on this period...
 design_end = "2019-12-31"
 test_start = "2020-01-01"      # ...and judged on this one
+max_adv_fraction = 0.05        # a buy may not make a position bigger than this share of...
+adv_days = 20                  # ...its average daily traded value over this many trading days
+min_trade_value = 10_000       # NTD; smaller rebalancing trades are skipped (full exits always happen)
 
 # Each strategy adds its own [strategy.<name>] section (see its issue).
