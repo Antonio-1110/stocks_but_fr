@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header>
+  <h1>{{.Title}}</h1>
+  <p class="stamp">Last updated {{.GeneratedAt}}{{if .PriceDate}} · prices as of {{.PriceDate}}{{end}}</p>
+</header>
+
+<main>
+<section class="backtest">
+  <h2>Backtest summary</h2>
+  {{if .Backtest}}
+  <dl>
+    {{range .Backtest}}<div><dt>{{.Name}}</dt><dd>{{.Value}}</dd></div>{{end}}
+  </dl>
+  {{else}}
+  <p class="muted">No backtest run in the store yet.</p>
+  {{end}}
+</section>
+
+<section>
+  <h2>Companies <span class="muted" id="count">{{len .Rows}}</span></h2>
+  {{if .Rows}}
+  <div class="filters">
+    <input id="q" type="search" placeholder="Filter: ticker, name, industry" aria-label="Filter">
+    <select id="industry" aria-label="Industry">
+      <option value="">All industries</option>
+      {{range .Industries}}<option>{{.}}</option>{{end}}
+    </select>
+  </div>
+  <p class="muted hint">Ranked by 3-month average revenue YoY. Tap a column header to sort.</p>
+  <div class="scroll">
+  <table id="list">
+    <thead><tr>
+      <th data-type="num" class="num">#</th>
+      <th data-type="text">Company</th>
+      <th data-type="text" class="hide-sm">Industry</th>
+      <th data-type="num" class="num">Price</th>
+      <th data-type="num" class="num">1M</th>
+      <th data-type="num" class="num" title="Revenue YoY, latest announced month">Rev YoY</th>
+      <th data-type="num" class="num" title="Revenue YoY, average of last 3 announced months">3M avg</th>
+      <th data-type="num" class="num" title="Distance from 52-week high">vs 52w high</th>
+      <th data-type="num" class="num" title="投信 net buy, last 10 trading days (張)">投信 10d</th>
+      <th data-type="num" class="num hide-sm" title="外資 net buy, last 10 trading days (張)">外資 10d</th>
+      <th data-type="num" class="num hide-sm" title="Average daily traded value, 20 days">Value 20d</th>
+      <th>Links</th>
+    </tr></thead>
+    <tbody>
+    {{range .Rows}}{{$l := .Links}}
+    <tr data-industry="{{.Industry}}">
+      <td class="num" data-sort="{{.Rank}}">{{.Rank}}</td>
+      <td data-sort="{{.Ticker}}"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b> {{.Name}}</a></td>
+      <td class="hide-sm">{{.Industry}}</td>
+      <td class="num" data-sort="{{sortVal .LastClose}}">{{price .LastClose}}</td>
+      <td class="num {{sign .Change1M}}" data-sort="{{sortVal .Change1M}}">{{pct .Change1M}}</td>
+      <td class="num {{sign .RevYoY}}" data-sort="{{sortVal .RevYoY}}" title="{{.RevMonth}}">{{pct .RevYoY}}</td>
+      <td class="num {{sign .RevYoYAvg}}" data-sort="{{sortVal .RevYoYAvg}}">{{pct .RevYoYAvg}}</td>
+      <td class="num" data-sort="{{sortVal .FromHigh}}">{{pct .FromHigh}}</td>
+      <td class="num {{sign .TrustNet10}}" data-sort="{{sortVal .TrustNet10}}">{{lots .TrustNet10}}</td>
+      <td class="num hide-sm {{sign .ForeignNet10}}" data-sort="{{sortVal .ForeignNet10}}">{{lots .ForeignNet10}}</td>
+      <td class="num hide-sm" data-sort="{{sortVal .Turnover20}}">{{yi .Turnover20}}</td>
+      <td class="links"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener">Goodinfo</a> <a href="{{$l.Yahoo}}" target="_blank" rel="noopener">Yahoo</a> <a href="{{$l.MOPS}}" target="_blank" rel="noopener">MOPS</a></td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <p class="muted">No companies in the store yet. Run <code>radar collect</code> first.</p>
+  {{end}}
+</section>
+</main>
+
+<footer class="muted">Not financial advice. Colours follow Taiwan convention: red is up, green is down.</footer>
+<script src="static/app.js"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
+	"github.com/Antonio-1110/stocks_but_fr/internal/site"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
@@ -31,7 +32,9 @@ var collectors = []step{
 }
 
 // renderers run in order on `radar render`.
-var renderers = []step{}
+var renderers = []step{
+	{"site", site.Render},
+}
 
 func main() {
 	configPath := flag.String("config", "radar.toml", "path to the config file")

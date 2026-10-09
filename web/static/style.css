@@ -1,0 +1,55 @@
+:root {
+  --bg: #fff; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e3e3e3; --head: #f6f6f6;
+  --link: #1558b0; --up: #d0161b; --down: #0a8a3a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141414; --fg: #e8e8e8; --muted: #9a9a9a; --line: #2c2c2c; --head: #1e1e1e;
+    --link: #7fb0ff; --up: #ff5a5f; --down: #3ccf74;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 16px 32px; background: var(--bg); color: var(--fg);
+  font: 15px/1.45 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+}
+header, main, footer { max-width: 1200px; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 20px 0 2px; }
+h2 { font-size: 1.1rem; margin: 24px 0 8px; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.muted, .stamp { color: var(--muted); }
+.stamp { margin: 0; font-size: .9rem; }
+.hint { font-size: .85rem; margin: 6px 0; }
+footer { margin-top: 32px; font-size: .85rem; }
+
+.backtest dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0; }
+.backtest dl div { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+.backtest dt { color: var(--muted); font-size: .8rem; }
+.backtest dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-word; }
+
+.filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.filters input, .filters select {
+  font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+}
+.filters input { flex: 1 1 220px; min-width: 0; }
+
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+thead th { position: sticky; top: 0; background: var(--head); font-weight: 600; font-size: .85rem; cursor: pointer; user-select: none; }
+thead th:last-child { cursor: default; }
+th[aria-sort="ascending"]::after { content: " ▲"; }
+th[aria-sort="descending"]::after { content: " ▼"; }
+.num { text-align: right; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.links a { margin-right: 6px; font-size: .85rem; }
+tbody tr:hover { background: var(--head); }
+
+@media (max-width: 640px) {
+  body { font-size: 14px; }
+  .hide-sm { display: none; }
+  th, td { padding: 5px 6px; }
+}
