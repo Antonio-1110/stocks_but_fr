@@ -12,6 +12,9 @@ Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 
 ## Environment variables
 
-None yet. Every new one gets listed here.
+Every new one gets listed here.
+
+- `FINMIND_TOKEN`: FinMind API token (Actions secret). Optional; without it
+  FinMind allows fewer requests per hour, so backfills take more runs.
 
 Not financial advice.
