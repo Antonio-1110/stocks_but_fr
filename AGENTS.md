@@ -53,13 +53,14 @@ Shared files, which anyone may touch but only with small, additive edits
 - `internal/model/` (shared types)
 - `cmd/radar/main.go` (wiring only: add your step, don't restructure)
 - `AGENTS.md`, `README.md`
+- `radar.toml` (add your own section; don't change other sections' values)
 
 If you need a bigger change to a shared file or to another issue's files,
 open an issue describing it and leave it for the owner to schedule.
 
 ## 4. Stack and layout
 
-- **Language:** Go (1.24+). Standard library first; add a dependency only when
+- **Language:** Go (version pinned in `go.mod`). Standard library first; add a dependency only when
   it saves real work. Pure-Go deps only (no cgo) so it cross-compiles to the
   Raspberry Pi (`GOARCH=arm64`).
 - **Storage:** SQLite via `modernc.org/sqlite` (pure Go), file at `data/radar.db`.
@@ -68,21 +69,29 @@ open an issue describing it and leave it for the owner to schedule.
 - **Run:** GitHub Actions cron first; Docker (`Dockerfile`, `compose.yaml`) so
   the same thing runs on the owner's Pi.
 
+Current focus: **Taiwan only, backtest first.** Issues labelled `later`
+are parked; don't start them unless the owner asks.
+
 ```
-cmd/radar/            entrypoint: runs collect -> score -> render
-internal/model/       shared types (Company, Mention, Theme, ...)
+radar.toml            THE single config file: trading costs (commission,
+                      broker discount, min fee, sell tax), strategy params.
+                      Read by Go (internal/config) and Python (tomllib).
+                      Never hard-code a cost or a strategy parameter.
+cmd/radar/            entrypoint: radar collect | radar render
+internal/config/      loads radar.toml
+internal/model/       shared types (Company, Price, MonthlyRevenue, ...)
 internal/store/       SQLite open/migrate/read/write
-internal/market/us/   US company universe + daily prices
-internal/market/tw/   Taiwan (TWSE + TPEx) universe + daily prices
-internal/companies/   company descriptions (SEC EDGAR, TW profiles)
-internal/sources/     one subpackage per chatter source:
-  reddit/ stocktwits/ ptt/ news/
-internal/themes/      mention counting, acceleration scoring
-internal/exposure/    Claude-based theme labelling + company exposure
-internal/site/        static site generator
-web/                  templates and static assets
+internal/market/tw/   Taiwan universe (incl. delisted) + daily prices
+  revenue/            monthly revenue (月營收)
+  flows/              institutional flows (三大法人)
+internal/site/        static dashboard generator
+web/                  dashboard templates and static assets
 .github/workflows/    scheduled run + Pages deploy
-backtest/             (later) Python backtester; reads data/radar.db only
+backtest/             Python backtester; reads data/radar.db + radar.toml
+  strategies/         one file per strategy
+docs/                 research notes
+(later) internal/market/us/, internal/companies/, internal/sources/,
+        internal/themes/, internal/exposure/
 ```
 
 Go is the primary language. Python is used only in `backtest/`, with its
