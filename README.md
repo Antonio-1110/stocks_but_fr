@@ -15,6 +15,15 @@ Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 `backtest/` is a Python backtester that reads `data/radar.db` and
 `radar.toml`; see [backtest/README.md](backtest/README.md).
 
+## Daily run
+
+`.github/workflows/daily.yml` runs `radar collect` and `radar render` every
+day at 19:00 Taipei time (and on demand from the Actions tab), then publishes
+`public/` to GitHub Pages. The database is kept between runs as the
+`radar.db.gz` asset on the `data` release; download it to backtest locally:
+
+    gh release download data --pattern radar.db.gz --dir data && gunzip data/radar.db.gz
+
 ## Environment variables
 
 Every new one gets listed here.

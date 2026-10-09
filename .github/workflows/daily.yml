@@ -1,0 +1,122 @@
+# Daily run: collect Taiwan data into SQLite, render the dashboard, and
+# publish public/ to GitHub Pages.
+#
+# The database lives between runs as an asset on a release tagged `data`
+# (not in git, so history doesn't grow; each run replaces the one asset).
+# Anyone can download it there to run the backtester locally:
+#   gh release download data --pattern radar.db.gz && gunzip radar.db.gz
+#
+# Pages must be set to deploy from Actions once, by hand:
+#   Settings > Pages > Build and deployment > Source: GitHub Actions
+
+name: daily
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # 19:00 Taipei, after the close and the 三大法人 report
+  workflow_dispatch:
+
+# Runs never overlap: two runs would race on the database asset.
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+env:
+  DATA_TAG: data
+  DB_ASSET: radar.db.gz
+  TZ: Asia/Taipei
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Each collector paces FinMind for up to about an hour per run.
+    timeout-minutes: 300
+    permissions:
+      contents: write   # create the `data` release and replace its asset
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -o radar ./cmd/radar
+
+      # A missing release means this is the first run: start empty. A release
+      # whose download fails stops the job, so a fresh empty database never
+      # replaces the real one.
+      - name: Restore database
+        run: |
+          mkdir -p data
+          if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
+            if grep -q "release not found" <<<"$assets"; then
+              echo "No '$DATA_TAG' release yet; starting with an empty database"
+              exit 0
+            fi
+            echo "$assets"
+            exit 1
+          fi
+          # .new is left behind only if a previous save stopped halfway.
+          for name in "$DB_ASSET" "$DB_ASSET.new"; do
+            if grep -qxF "$name" <<<"$assets"; then
+              gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz
+              gunzip data/radar.db.gz
+              ls -lh data/radar.db
+              exit 0
+            fi
+          done
+          echo "Release '$DATA_TAG' has no database asset; starting empty"
+
+      - name: Collect
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+        run: ./radar collect
+
+      # Upload under a temporary name, then swap, so a failed upload never
+      # leaves the release without a database.
+      - name: Save database
+        run: |
+          python3 - <<'EOF'
+          import sqlite3
+          db = sqlite3.connect("data/radar.db")
+          db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+          ok = db.execute("PRAGMA quick_check").fetchone()[0]
+          if ok != "ok":
+              raise SystemExit(f"database check failed: {ok}")
+          db.execute("PRAGMA journal_mode=DELETE")  # fold the WAL into the file
+          db.close()
+          EOF
+          gzip -c data/radar.db > "$DB_ASSET.new"
+          ls -lh data/radar.db "$DB_ASSET.new"
+          if ! gh release view "$DATA_TAG" >/dev/null 2>&1; then
+            gh release create "$DATA_TAG" --prerelease --title "Data snapshot" \
+              --notes "Latest data/radar.db, replaced by the daily workflow. Not a software release."
+          fi
+          gh release upload "$DATA_TAG" "$DB_ASSET.new" --clobber
+          gh release delete-asset "$DATA_TAG" "$DB_ASSET" --yes 2>/dev/null || true
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" \
+            -q ".assets[] | select(.name == \"$DB_ASSET.new\") | .id")
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$id" -f name="$DB_ASSET" >/dev/null
+
+      - name: Render
+        run: ./radar render
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: run
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
