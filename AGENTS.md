@@ -1,0 +1,95 @@
+# Rules for agents working in this repo
+
+Read this whole file before editing any code. These rules come from the repo
+owner and override any default habit of yours (including "make a branch and
+open a PR").
+
+## 1. One branch: `main`
+
+This project is pre-product. There are no feature branches and no pull
+requests until the owner says otherwise.
+
+- Work directly on `main`. Do not create branches. Do not open PRs.
+- Commit small and often. Push after every commit.
+- Sync loop, every time:
+  ```sh
+  git pull --rebase origin main   # before you start, and before every commit
+  go vet ./... && go test ./...   # must pass before you push
+  git push origin main
+  ```
+- If the push is rejected, `git pull --rebase origin main`, re-run the build
+  and tests, and push again.
+- On a rebase conflict, keep both sides' intent. If you can't tell what the
+  other side meant, stop and ask the owner. Never `--force` push, never
+  rewrite history, never revert someone else's commit to make yours fit.
+- Never leave `main` broken. If you can't finish, push only code that builds
+  (stub it, or leave it unwired), and say what's left on the issue.
+
+## 2. The to-do list is GitHub Issues
+
+Every piece of work is an issue. Before you write code:
+
+1. Find the issue for your task. If none exists, create one first (with a
+   **Files** section, see below).
+2. Check it isn't already labelled `in-progress`. If it is, someone else owns
+   it: don't touch it. Pick something else or tell the owner.
+3. Claim it: add the `in-progress` label and comment
+   `Claimed by <short description of your session/thread>`.
+4. Check its **Blocked by** list. Don't start if a blocker is still open.
+
+When you finish: the last commit message ends with `Closes #N`, and remove
+the `in-progress` label. If you find extra work along the way, open a new
+issue for it instead of growing your current one.
+
+## 3. Stay inside your files
+
+Each issue has a **Files** section listing the directories it owns. Only
+edit those. This is what keeps parallel agents from stepping on each other.
+
+Shared files, which anyone may touch but only with small, additive edits
+(add a line or a field; don't reorder, reformat, or rename):
+
+- `go.mod`, `go.sum` (run `go mod tidy` only for packages you added)
+- `internal/model/` (shared types)
+- `cmd/radar/main.go` (wiring only: add your step, don't restructure)
+- `AGENTS.md`, `README.md`
+
+If you need a bigger change to a shared file or to another issue's files,
+open an issue describing it and leave it for the owner to schedule.
+
+## 4. Stack and layout
+
+- **Language:** Go (1.24+). Standard library first; add a dependency only when
+  it saves real work. Pure-Go deps only (no cgo) so it cross-compiles to the
+  Raspberry Pi (`GOARCH=arm64`).
+- **Storage:** SQLite via `modernc.org/sqlite` (pure Go), file at `data/radar.db`.
+- **Output:** static site generated with `html/template` into `public/`,
+  deployed to GitHub Pages. No live backend.
+- **Run:** GitHub Actions cron first; Docker (`Dockerfile`, `compose.yaml`) so
+  the same thing runs on the owner's Pi.
+
+```
+cmd/radar/            entrypoint: runs collect -> score -> render
+internal/model/       shared types (Company, Mention, Theme, ...)
+internal/store/       SQLite open/migrate/read/write
+internal/market/us/   US company universe + daily prices
+internal/market/tw/   Taiwan (TWSE + TPEx) universe + daily prices
+internal/companies/   company descriptions (SEC EDGAR, TW profiles)
+internal/sources/     one subpackage per chatter source:
+  reddit/ stocktwits/ ptt/ news/
+internal/themes/      mention counting, acceleration scoring
+internal/exposure/    Claude-based theme labelling + company exposure
+internal/site/        static site generator
+web/                  templates and static assets
+.github/workflows/    scheduled run + Pages deploy
+```
+
+## 5. Other rules
+
+- Secrets (API keys) come from environment variables, never committed. List
+  any new variable in `README.md`.
+- Every collector must be polite: identify itself with a User-Agent, respect
+  rate limits, cache responses, and fail soft (log and skip, don't crash the run).
+- Write a test for parsing code using a saved sample response in
+  `testdata/`, so tests never hit the network.
+- No code that places broker orders unless the owner asks for it explicitly.

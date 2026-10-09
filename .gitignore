@@ -1,0 +1,5 @@
+/data/
+/public/
+/radar
+*.db
+.env
