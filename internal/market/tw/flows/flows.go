@@ -184,6 +184,9 @@ func (c *Collector) daily(ctx context.Context, st *store.Store) error {
 			if err != nil {
 				log.Printf("flows: %s %s: %v", src, key, err)
 				errs = append(errs, fmt.Errorf("%s %s: %w", src, key, err))
+				if errors.Is(err, errBlocked) {
+					break // retrying now only extends the block
+				}
 				continue
 			}
 			if err := st.UpsertFlows(rows); err != nil {

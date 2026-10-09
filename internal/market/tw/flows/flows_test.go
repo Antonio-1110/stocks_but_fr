@@ -60,8 +60,8 @@ func TestParseFinMind(t *testing.T) {
 		t.Fatalf("got %d rows, want 2", len(rows))
 	}
 	// Same 2024-10-01 numbers as the TWSE fixture, so both sources agree.
-	check(t, rows, "2330", "2024-10-01", -7_608_187, 829_000, -63_000)
-	check(t, rows, "2330", "2024-10-04", 8_705_223+1_000, -209_000, -20_000)
+	check(t, rows, "2330", "2024-10-01", 1_485_512, -6_996, -12_226)
+	check(t, rows, "2330", "2024-10-04", 3_077_359, -165_753, -729_460+108_842)
 }
 
 func TestParseFinMindQuota(t *testing.T) {
@@ -86,9 +86,9 @@ func TestParseTWSE(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("got %d rows, want 3", len(rows))
 	}
-	check(t, rows, "2330", "2024-10-01", -7_608_187, 829_000, -63_000)
-	check(t, rows, "0050", "2024-10-01", 2_099_500+1_000, 0, -215_000)
-	check(t, rows, "2317", "2024-10-01", -123_457, -50_000, 0)
+	check(t, rows, "2330", "2024-10-01", 1_485_512, -6_996, -12_226)
+	check(t, rows, "0050", "2024-10-01", -4_042_285, -88_000, -520_778)
+	check(t, rows, "2317", "2024-10-01", -2_755_710, 88_230, -1_984_569)
 }
 
 func TestParseTWSEHoliday(t *testing.T) {
@@ -117,8 +117,8 @@ func TestParseTPEx(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("got %d rows, want 2", len(rows))
 	}
-	check(t, rows, "6488", "2024-10-01", 40_000, 10_000, -2_000)
-	check(t, rows, "8069", "2024-10-01", -390_000, -20_000, 0)
+	check(t, rows, "6488", "2024-10-01", -299_780, 11_000, 598)
+	check(t, rows, "8069", "2024-10-01", 109_482, 328_100, -67_054)
 }
 
 func TestParseTPExUnlabelledColumns(t *testing.T) {
@@ -128,7 +128,7 @@ func TestParseTPExUnlabelledColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check(t, rows, "6488", "2024-10-01", 40_000, 10_000, -2_000)
+	check(t, rows, "6488", "2024-10-01", -299_780, 11_000, 598)
 }
 
 func TestParseTPExHoliday(t *testing.T) {
@@ -223,7 +223,7 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if foreign != -7_608_187 || trust != 829_000 || dealer != -63_000 {
+	if foreign != 1_485_512 || trust != -6_996 || dealer != -12_226 {
 		t.Errorf("2330 2024-10-01 = %d %d %d", foreign, trust, dealer)
 	}
 
@@ -235,5 +235,42 @@ func TestRun(t *testing.T) {
 	}
 	if !done["2024-10-02"] || !done["2024-10-01"] || done["2024-10-04"] || done["2024-10-05"] {
 		t.Errorf("TWSE fetch log = %v", done)
+	}
+}
+
+// testdata/twse_blocked.html is the page TWSE sends while it blocks an
+// address. One such answer ends the TWSE part of the run; TPEx still runs.
+func TestDailyStopsWhenTWSEBlocks(t *testing.T) {
+	var twseHits, tpexHits int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twse", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&twseHits, 1)
+		w.Write(readFile(t, "twse_blocked.html"))
+	})
+	mux.HandleFunc("/tpex", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&tpexHits, 1)
+		w.Write(readFile(t, "tpex_holiday.json"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	st, err := store.Open(filepath.Join(t.TempDir(), "radar.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := ensureSchema(st.DB); err != nil {
+		t.Fatal(err)
+	}
+	c := &Collector{
+		Client:  srv.Client(),
+		TWSEURL: srv.URL + "/twse",
+		TPExURL: srv.URL + "/tpex",
+		Now:     func() time.Time { return time.Date(2024, 10, 5, 10, 0, 0, 0, taipei) },
+	}
+	if err := c.daily(context.Background(), st); !errors.Is(err, errBlocked) {
+		t.Errorf("err = %v, want errBlocked", err)
+	}
+	if twseHits != 1 || tpexHits < 2 {
+		t.Errorf("TWSE hit %d times (want 1), TPEx %d (want every day)", twseHits, tpexHits)
 	}
 }

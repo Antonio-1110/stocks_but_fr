@@ -1,4 +1,7 @@
-Saved responses for the parsers' tests. The FinMind, TWSE T86 and TPEx
-shapes were written from the documented formats, not captured live (the
-container that wrote them had no network). If a live run logs a parse
-error, replace the matching file with a real response and fix the parser.
+Saved responses for the parsers' tests, captured live on 2026-10-09 and
+trimmed to a few rows (FinMind 2330 for 2024-10-01 and 10-04, TWSE T86 and
+TPEx for 2024-10-01, TPEx for the 2024-10-02 typhoon closure, and the page
+TWSE sends while it blocks an address).
+
+Still hand-written: `twse_t86_holiday.json` (TWSE was blocking the capture
+address) and `finmind_quota.json` (a rate-limit answer can't be asked for).

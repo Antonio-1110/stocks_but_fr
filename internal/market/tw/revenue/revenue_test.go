@@ -17,9 +17,8 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
-// testdata/finmind_2330.json follows the TaiwanStockMonthRevenue response
-// shape (TSMC, Jan 2023 to Feb 2024). It was written by hand from FinMind's
-// documented format because the build container cannot reach the API.
+// testdata/finmind_2330.json is a real TaiwanStockMonthRevenue response
+// (TSMC, Jan 2023 to Feb 2024).
 
 func month(y, m int) time.Time { return time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC) }
 
@@ -58,13 +57,13 @@ func TestParseAndConvert(t *testing.T) {
 	if !math.IsNaN(jan23.YoYPct) || !math.IsNaN(jan23.MoMPct) {
 		t.Errorf("jan23 has no base months, want NaN pcts: %+v", jan23)
 	}
-	if want := (215785107000.0/200050544000 - 1) * 100; !near(jan24.YoYPct, want) {
+	if want := (215785127000.0/200050544000 - 1) * 100; !near(jan24.YoYPct, want) {
 		t.Errorf("jan24 YoY = %v, want %v", jan24.YoYPct, want)
 	}
-	if want := (215785107000.0/176299866000 - 1) * 100; !near(jan24.MoMPct, want) {
+	if want := (215785127000.0/176299866000 - 1) * 100; !near(jan24.MoMPct, want) {
 		t.Errorf("jan24 MoM = %v, want %v", jan24.MoMPct, want)
 	}
-	if want := (181648270000.0/215785107000 - 1) * 100; !near(feb24.MoMPct, want) {
+	if want := (181648270000.0/215785127000 - 1) * 100; !near(feb24.MoMPct, want) {
 		t.Errorf("feb24 MoM = %v, want %v", feb24.MoMPct, want)
 	}
 	if !jan24.AnnouncedOn.Equal(time.Date(2024, 2, 10, 0, 0, 0, 0, time.UTC)) {

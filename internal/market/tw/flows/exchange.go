@@ -1,8 +1,10 @@
 package flows
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,11 @@ import (
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 )
+
+// errBlocked means TWSE answered with its "FOR SECURITY REASONS" page
+// instead of data. It blocks an address for a while after a burst of
+// requests, so the rest of the run leaves TWSE alone.
+var errBlocked = errors.New("blocked by the exchange's firewall")
 
 func (c *Collector) fetchExchange(ctx context.Context, src string, day time.Time) ([]model.InstitutionalFlow, error) {
 	var u string
@@ -46,6 +53,9 @@ func (c *Collector) fetchExchange(ctx context.Context, src string, day time.Time
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return nil, err
+	}
+	if bytes.Contains(body, []byte("FOR SECURITY REASONS")) {
+		return nil, errBlocked
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %.200s", resp.StatusCode, body)
