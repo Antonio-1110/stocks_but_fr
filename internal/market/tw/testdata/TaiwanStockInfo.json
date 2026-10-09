@@ -1,0 +1,11 @@
+{"msg":"success","status":200,"data":[
+{"industry_category":"ETF","stock_id":"0050","stock_name":"元大台灣50","type":"twse","date":"2026-10-08"},
+{"industry_category":"上櫃指數股票型基金(ETF)","stock_id":"006201","stock_name":"元大富櫃50","type":"tpex","date":"2026-10-08"},
+{"industry_category":"電子工業","stock_id":"2330","stock_name":"台積電","type":"twse","date":"2026-10-08"},
+{"industry_category":"半導體業","stock_id":"2330","stock_name":"台積電","type":"twse","date":"2026-10-08"},
+{"industry_category":"金融保險業","stock_id":"2888","stock_name":"新光金","type":"twse","date":"2026-10-08"},
+{"industry_category":"半導體業","stock_id":"6488","stock_name":"環球晶","type":"tpex","date":"2026-10-08"},
+{"industry_category":"生技醫療業","stock_id":"6919","stock_name":"康霈*","type":"emerging","date":"2026-10-08"},
+{"industry_category":"大盤","stock_id":"TAIEX","stock_name":"發行量加權股價指數","type":"twse","date":"2026-10-08"},
+{"industry_category":"Index","stock_id":"Automobile","stock_name":"汽車類指數","type":"twse","date":"2026-10-08"}
+]}

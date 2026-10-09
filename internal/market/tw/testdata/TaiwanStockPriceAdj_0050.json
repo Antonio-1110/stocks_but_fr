@@ -1,0 +1,4 @@
+{"msg":"success","status":200,"data":[
+{"date":"2024-06-13","stock_id":"0050","Trading_Volume":11534222,"Trading_money":2193251010,"open":189.0,"max":190.95,"min":188.9,"close":190.25,"spread":1.4,"Trading_turnover":13120},
+{"date":"2024-06-14","stock_id":"0050","Trading_Volume":9811260,"Trading_money":1876523010,"open":190.5,"max":192.0,"min":190.1,"close":191.45,"spread":1.2,"Trading_turnover":11087}
+]}

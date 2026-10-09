@@ -1,0 +1,6 @@
+{"msg":"success","status":200,"data":[
+{"date":"2024-06-11","stock_id":"2330","Trading_Volume":30116510,"Trading_money":26655064870,"open":873.19,"max":885.13,"min":872.19,"close":881.15,"spread":4.98,"Trading_turnover":40211},
+{"date":"2024-06-12","stock_id":"2330","Trading_Volume":52133407,"Trading_money":47781543730,"open":900.07,"max":919.98,"min":897.08,"close":916.0,"spread":34.85,"Trading_turnover":82015},
+{"date":"2024-06-13","stock_id":"2330","Trading_Volume":41887520,"Trading_money":38604215510,"open":919.0,"max":925.0,"min":908.0,"close":914.0,"spread":-2.0,"Trading_turnover":61302},
+{"date":"2024-06-14","stock_id":"2330","Trading_Volume":29001342,"Trading_money":26794318120,"open":916.0,"max":929.0,"min":912.0,"close":924.0,"spread":10.0,"Trading_turnover":40877}
+]}
