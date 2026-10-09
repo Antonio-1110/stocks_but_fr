@@ -82,7 +82,12 @@ internal/exposure/    Claude-based theme labelling + company exposure
 internal/site/        static site generator
 web/                  templates and static assets
 .github/workflows/    scheduled run + Pages deploy
+backtest/             (later) Python backtester; reads data/radar.db only
 ```
+
+Go is the primary language. Python is used only in `backtest/`, with its
+own `pyproject.toml`. The two never import each other: the SQLite file is
+the only contract between them.
 
 ## 5. Other rules
 
