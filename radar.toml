@@ -1,0 +1,25 @@
+# The one place for trading costs and strategy settings.
+# Read by the Go pipeline (internal/config) and the Python backtester (tomllib).
+# Never hard-code a cost or a strategy parameter anywhere else.
+
+[run]
+db_path = "data/radar.db"
+public_dir = "public"
+history_start = "2010-01-01"   # how far back collectors backfill
+
+[costs.tw]
+commission_rate = 0.001425     # statutory maximum, charged on buys and sells
+broker_discount = 0.6          # fraction of commission you actually pay (0.6 = 6折). Set to your broker's.
+min_commission = 20            # NTD per order
+sell_tax = 0.003               # securities transaction tax on stock sells
+etf_sell_tax = 0.001           # transaction tax on ETF sells (e.g. 0050)
+day_trade_sell_tax = 0.0015    # reduced day-trade rate, legislated until 2027-12-31
+
+[backtest]
+initial_capital = 5_000_000    # NTD
+benchmark = "0050"
+design_start = "2012-01-01"    # rules are tuned on this period...
+design_end = "2019-12-31"
+test_start = "2020-01-01"      # ...and judged on this one
+
+# Each strategy adds its own [strategy.<name>] section (see its issue).
