@@ -1,0 +1,12 @@
+{"msg":"success","status":200,"data":[
+{"date":"2024-10-01","stock_id":"2330","buy":12603245,"name":"Foreign_Investor","sell":20211432},
+{"date":"2024-10-01","stock_id":"2330","buy":0,"name":"Foreign_Dealer_Self","sell":0},
+{"date":"2024-10-01","stock_id":"2330","buy":1062000,"name":"Investment_Trust","sell":233000},
+{"date":"2024-10-01","stock_id":"2330","buy":180000,"name":"Dealer_self","sell":334000},
+{"date":"2024-10-01","stock_id":"2330","buy":642000,"name":"Dealer_Hedging","sell":551000},
+{"date":"2024-10-04","stock_id":"2330","buy":21005343,"name":"Foreign_Investor","sell":12300120},
+{"date":"2024-10-04","stock_id":"2330","buy":2000,"name":"Foreign_Dealer_Self","sell":1000},
+{"date":"2024-10-04","stock_id":"2330","buy":503000,"name":"Investment_Trust","sell":712000},
+{"date":"2024-10-04","stock_id":"2330","buy":220000,"name":"Dealer_self","sell":120000},
+{"date":"2024-10-04","stock_id":"2330","buy":810000,"name":"Dealer_Hedging","sell":930000}
+]}

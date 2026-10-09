@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
@@ -24,6 +25,7 @@ type step struct {
 // collectors run in order on `radar collect`. Each data issue adds its line here.
 var collectors = []step{
 	{"tw-revenue", revenue.Collect}, // needs the TW universe in companies
+	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
 }
 
 // renderers run in order on `radar render`.
