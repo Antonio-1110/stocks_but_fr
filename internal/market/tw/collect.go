@@ -29,11 +29,8 @@ const checksTable = `CREATE TABLE IF NOT EXISTS tw_price_checks (
 // Collect is the `radar collect` step: refresh the universe, then backfill or
 // update prices until everything is current or this run's budget is spent.
 func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
-	c := NewFinMind()
-	if c.Token == "" {
-		log.Printf("tw: FINMIND_TOKEN not set, using FinMind's lower anonymous limit")
-	}
-	return collect(ctx, cfg, st, c, time.Now().In(taipei))
+	// Revenue and flows run after this step and share the FinMind budget.
+	return collect(ctx, cfg, st, ForStep("tw-prices", 2), time.Now().In(taipei))
 }
 
 func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, now time.Time) error {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
@@ -189,13 +190,11 @@ func TestRun(t *testing.T) {
 	}
 
 	c := &Collector{
-		Client:     srv.Client(),
-		FinMindURL: srv.URL + "/finmind",
-		TWSEURL:    srv.URL + "/twse",
-		TPExURL:    srv.URL + "/tpex",
-		Token:      "tok",
-		FinMindMax: 100,
-		Now:        func() time.Time { return time.Date(2024, 10, 5, 10, 0, 0, 0, taipei) },
+		Client:  srv.Client(),
+		FinMind: &tw.FinMind{BaseURL: srv.URL + "/finmind", Token: "tok", Budget: 100, HTTP: srv.Client()},
+		TWSEURL: srv.URL + "/twse",
+		TPExURL: srv.URL + "/tpex",
+		Now:     func() time.Time { return time.Date(2024, 10, 5, 10, 0, 0, 0, taipei) },
 	}
 	cfg := config.Default()
 	for run := 0; run < 2; run++ {

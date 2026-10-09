@@ -14,22 +14,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
 const (
 	userAgent = "stocks_but_fr-radar/0.1 (+https://github.com/Antonio-1110/stocks_but_fr)"
-
-	// FinMind allows 600 requests/hour with a token and 300 without.
-	// Stay under that and cap each run; the backfill resumes next run.
-	finmindGapToken   = 6500 * time.Millisecond
-	finmindGapNoToken = 13 * time.Second
-	finmindPerRun     = 300
 
 	// The exchanges block clients that hit them faster than a few per 5s.
 	exchangeGap = 3 * time.Second
@@ -43,32 +37,21 @@ var taipei = time.FixedZone("Asia/Taipei", 8*60*60)
 
 // Collector holds the endpoints and pacing so tests can point it at fakes.
 type Collector struct {
-	Client      *http.Client
-	FinMindURL  string
+	Client      *http.Client // for the exchanges' daily reports
+	FinMind     *tw.FinMind  // paces requests and caps them per run
 	TWSEURL     string
 	TPExURL     string
-	Token       string // FinMind API token; optional
-	FinMindGap  time.Duration
 	ExchangeGap time.Duration
-	FinMindMax  int
 	Now         func() time.Time
 }
 
 func New() *Collector {
-	token := os.Getenv("FINMIND_TOKEN")
-	gap := finmindGapNoToken
-	if token != "" {
-		gap = finmindGapToken
-	}
 	return &Collector{
 		Client:      &http.Client{Timeout: 60 * time.Second},
-		FinMindURL:  "https://api.finmindtrade.com/api/v4/data",
+		FinMind:     tw.ForStep("tw-flows", 0), // the last FinMind step: whatever is left
 		TWSEURL:     "https://www.twse.com.tw/rwd/zh/fund/T86",
 		TPExURL:     "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade",
-		Token:       token,
-		FinMindGap:  gap,
 		ExchangeGap: exchangeGap,
-		FinMindMax:  finmindPerRun,
 		Now:         time.Now,
 	}
 }
@@ -125,21 +108,18 @@ func (c *Collector) backfill(ctx context.Context, st *store.Store, start time.Ti
 		}
 		todo = append(todo, co)
 	}
-	log.Printf("flows: FinMind backfill: %d of %d tickers left, up to %d this run", len(todo), len(companies), c.FinMindMax)
+	log.Printf("flows: FinMind backfill: %d of %d tickers left, up to %d this run", len(todo), len(companies), c.FinMind.Left())
 
 	var failed []error
 	for i, co := range todo {
-		if i >= c.FinMindMax {
-			break
-		}
-		if i > 0 {
-			if err := sleep(ctx, c.FinMindGap); err != nil {
-				return err
-			}
-		}
 		rows, err := c.fetchFinMind(ctx, co.Ticker, start.Format("2006-01-02"), end)
 		if errors.Is(err, errQuota) {
-			return fmt.Errorf("stopping after %d tickers: %w", i, err)
+			// The run's budget being spent is the normal end of a backfill run.
+			log.Printf("flows: FinMind budget or quota reached after %d tickers; resumes next run", i)
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 		if err != nil {
 			log.Printf("flows: FinMind %s: %v", co.Ticker, err)

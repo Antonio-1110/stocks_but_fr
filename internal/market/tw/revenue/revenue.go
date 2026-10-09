@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,19 +20,16 @@ import (
 	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
-const (
-	// FinMind allows 600 requests/hour with a token (300 without), so one
-	// request every 6s stays under it. A full backfill of ~2,000 companies
-	// takes several runs; each run resumes from what the database holds.
-	requestInterval = 6 * time.Second
-	maxRequestsRun  = 550
-	// A cached response younger than this is reused instead of refetched.
-	cacheTTL = 20 * time.Hour
-)
+// A cached response younger than this is reused instead of refetched.
+// Pacing and the per-run request budget come from the shared FinMind client
+// (tw.ForStep); a full backfill takes several runs, each resuming from what
+// the database holds.
+const cacheTTL = 20 * time.Hour
 
 // Collect is the `radar collect` step.
 func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
@@ -41,30 +37,22 @@ func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
 	if err != nil {
 		return fmt.Errorf("run.history_start: %w", err)
 	}
-	token := os.Getenv("FINMIND_TOKEN")
-	if token == "" {
-		log.Printf("tw-revenue: FINMIND_TOKEN not set, using FinMind's lower anonymous limit")
-	}
 	c := collector{
 		st:       st,
-		client:   &client{http: &http.Client{Timeout: 60 * time.Second}, token: token},
+		finmind:  tw.ForStep("tw-revenue", 1), // tw-flows runs after this step
 		cacheDir: filepath.Join(filepath.Dir(cfg.Run.DBPath), "cache", "tw-revenue"),
 		start:    start,
 		now:      time.Now(),
-		interval: requestInterval,
-		budget:   maxRequestsRun,
 	}
 	return c.run(ctx)
 }
 
 type collector struct {
 	st       *store.Store
-	client   *client
+	finmind  *tw.FinMind
 	cacheDir string
 	start    time.Time // first revenue month to store
 	now      time.Time
-	interval time.Duration
-	budget   int
 }
 
 func (c *collector) run(ctx context.Context) error {
@@ -78,17 +66,13 @@ func (c *collector) run(ctx context.Context) error {
 	}
 	fetched, failed, stored := 0, 0, 0
 	for i, t := range todo {
-		if fetched >= c.budget {
-			log.Printf("tw-revenue: request budget used, %d tickers left for next run", len(todo)-i)
+		rows, hit, err := c.load(ctx, t)
+		if errors.Is(err, errQuota) {
+			log.Printf("tw-revenue: FinMind budget or quota reached, %d tickers left for next run", len(todo)-i)
 			break
 		}
-		rows, hit, err := c.load(ctx, t)
 		if !hit {
 			fetched++
-		}
-		if errors.Is(err, errQuota) {
-			log.Printf("tw-revenue: FinMind quota reached, stopping; resumes next run")
-			break
 		}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -172,7 +156,7 @@ func latestMonths(db *sql.DB) (map[string]time.Time, error) {
 }
 
 // load returns a ticker's rows from the on-disk cache when fresh (hit=true),
-// otherwise from FinMind, waiting out the request interval first.
+// otherwise from FinMind.
 func (c *collector) load(ctx context.Context, t target) (rows []finmindRow, hit bool, err error) {
 	path := filepath.Join(c.cacheDir, fmt.Sprintf("%s_%s.json", t.ticker, t.from.Format("2006-01")))
 	if fi, err := os.Stat(path); err == nil && c.now.Sub(fi.ModTime()) < cacheTTL {
@@ -182,12 +166,10 @@ func (c *collector) load(ctx context.Context, t target) (rows []finmindRow, hit 
 			}
 		}
 	}
-	select {
-	case <-ctx.Done():
-		return nil, false, ctx.Err()
-	case <-time.After(c.interval):
-	}
-	body, err := c.client.fetch(ctx, t.ticker, t.from)
+	body, err := c.finmind.Get(ctx, "TaiwanStockMonthRevenue", map[string]string{
+		"data_id":    t.ticker,
+		"start_date": t.from.Format("2006-01-02"),
+	})
 	if err != nil {
 		return nil, false, err
 	}

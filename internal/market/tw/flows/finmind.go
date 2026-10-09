@@ -3,50 +3,27 @@ package flows
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 )
 
-// errQuota means FinMind's hourly limit is used up; stop for this run.
-var errQuota = errors.New("FinMind request limit reached")
+// errQuota means FinMind's hourly limit is reached or the shared run budget
+// is spent; stop for this run.
+var errQuota = tw.ErrStop
 
 func (c *Collector) fetchFinMind(ctx context.Context, ticker, start, end string) ([]model.InstitutionalFlow, error) {
-	q := url.Values{
-		"dataset":    {"TaiwanStockInstitutionalInvestorsBuySell"},
-		"data_id":    {ticker},
-		"start_date": {start},
-		"end_date":   {end},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.FinMindURL+"?"+q.Encode(), nil)
+	body, err := c.FinMind.Get(ctx, "TaiwanStockInstitutionalInvestorsBuySell", map[string]string{
+		"data_id":    ticker,
+		"start_date": start,
+		"end_date":   end,
+	})
 	if err != nil {
 		return nil, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-	resp, err := c.Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode == http.StatusPaymentRequired || resp.StatusCode == http.StatusTooManyRequests {
-		return nil, errQuota
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %.200s", resp.StatusCode, body)
 	}
 	return parseFinMind(body)
 }

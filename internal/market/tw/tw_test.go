@@ -255,3 +255,53 @@ func TestDividendRescalesHistory(t *testing.T) {
 		t.Errorf("rescaled adj close = %v, want %v", adj, want)
 	}
 }
+
+
+// Steps get slices of one run budget. A step's unused requests stay with the
+// run, and FinMind's 402 ends the run for every step, not just the one hit.
+func TestSharedBudget(t *testing.T) {
+	n, limit := 0, 5
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		if n > limit {
+			// FinMind also sends its limit message with HTTP 200.
+			w.Write([]byte(`{"msg":"Requests reach the upper limit.","status":402}`))
+			return
+		}
+		w.Write([]byte(`{"msg":"success","status":200,"data":[]}`))
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	run := &FinMind{BaseURL: srv.URL, Budget: 10, HTTP: srv.Client()}
+
+	first := run.Allot(run.Left() / 3)
+	for i := 0; i < 3; i++ {
+		if _, err := first.Get(ctx, "x", nil); err != nil {
+			t.Fatalf("request %d: %v", i, err)
+		}
+	}
+	if _, err := first.Get(ctx, "x", nil); !errors.Is(err, ErrStop) {
+		t.Fatalf("4th request of a 3-request slice: err = %v, want ErrStop", err)
+	}
+	if run.Left() != 7 || n != 3 {
+		t.Fatalf("run left %d after %d requests, want 7 after 3", run.Left(), n)
+	}
+
+	second := run.Allot(run.Left() / 2) // 3 of 7
+	if _, err := second.Get(ctx, "x", nil); err != nil {
+		t.Fatal(err)
+	}
+	third := run.Allot(run.Left()) // the 6 left, unused ones included
+	if third.Left() != 6 {
+		t.Fatalf("last step gets %d, want 6", third.Left())
+	}
+	if _, err := third.Get(ctx, "x", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := third.Get(ctx, "x", nil); !errors.Is(err, ErrStop) {
+		t.Fatalf("over FinMind's limit: err = %v, want ErrStop", err)
+	}
+	if run.Left() != 0 || run.Allot(5).Left() != 0 {
+		t.Errorf("after a 402 the run has %d requests left, want 0", run.Left())
+	}
+}

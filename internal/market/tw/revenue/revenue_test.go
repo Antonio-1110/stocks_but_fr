@@ -9,10 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
@@ -99,9 +101,6 @@ func TestCollectEndToEnd(t *testing.T) {
 		w.Write(fixture)
 	}))
 	defer srv.Close()
-	old := finmindURL
-	finmindURL = srv.URL
-	defer func() { finmindURL = old }()
 
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "radar.db"))
@@ -119,11 +118,10 @@ func TestCollectEndToEnd(t *testing.T) {
 	}
 	c := collector{
 		st:       st,
-		client:   &client{http: srv.Client()},
+		finmind:  &tw.FinMind{BaseURL: srv.URL, Budget: 10, HTTP: srv.Client()},
 		cacheDir: filepath.Join(dir, "cache"),
 		start:    month(2023, 1),
 		now:      time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
-		budget:   10,
 	}
 	if err := c.run(context.Background()); err != nil {
 		t.Fatal(err)
@@ -131,7 +129,7 @@ func TestCollectEndToEnd(t *testing.T) {
 	if n := calls.Load(); n != 2 {
 		t.Errorf("requests = %d, want 2 (2330 and 9999, not the ETF)", n)
 	}
-	if gotUA != userAgent || gotQuery == "" {
+	if !strings.HasPrefix(gotUA, "stocks_but_fr-radar/") || gotQuery == "" {
 		t.Errorf("UA %q query %q", gotUA, gotQuery)
 	}
 
@@ -184,9 +182,6 @@ func TestQuotaStopsRun(t *testing.T) {
 		w.WriteHeader(http.StatusPaymentRequired)
 	}))
 	defer srv.Close()
-	old := finmindURL
-	finmindURL = srv.URL
-	defer func() { finmindURL = old }()
 
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "radar.db"))
@@ -198,8 +193,8 @@ func TestQuotaStopsRun(t *testing.T) {
 		{Market: model.MarketTW, Ticker: "1101", Name: "台泥"},
 		{Market: model.MarketTW, Ticker: "2330", Name: "台積電"},
 	})
-	c := collector{st: st, client: &client{http: srv.Client()}, cacheDir: filepath.Join(dir, "cache"),
-		start: month(2023, 1), now: time.Now(), budget: 10}
+	c := collector{st: st, finmind: &tw.FinMind{BaseURL: srv.URL, Budget: 10, HTTP: srv.Client()},
+		cacheDir: filepath.Join(dir, "cache"), start: month(2023, 1), now: time.Now()}
 	if err := c.run(context.Background()); err != nil {
 		t.Fatalf("quota should end the run softly, got %v", err)
 	}
