@@ -1,0 +1,13 @@
+# Files Docker should NOT send to the build. Keeps builds fast and keeps
+# secrets and local data out of the image.
+.git
+.github
+.env
+data/
+public/
+radar
+*.db
+backtest/
+docs/
+Dockerfile
+compose.yaml

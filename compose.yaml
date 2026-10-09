@@ -1,0 +1,42 @@
+# Run the whole pipeline with:   docker compose up -d
+# Watch it with:                 docker compose logs -f
+# Stop it with:                  docker compose down
+# Walkthrough of every line: docs/docker.md
+
+services:
+  # The pipeline: collect data, render the site, sleep, repeat.
+  radar:
+    build: .                     # build the image from ./Dockerfile
+    image: stocks-radar:latest   # name for the built image
+    restart: unless-stopped      # come back after a crash or a Pi reboot
+    # The image's ENTRYPOINT is `radar`; override it with a shell loop.
+    # $$ escapes $ so the shell in the container sees it, not compose.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          radar collect
+          radar render
+          echo "sleeping $${RADAR_INTERVAL_SECONDS}s until the next run"
+          sleep "$${RADAR_INTERVAL_SECONDS}"
+        done
+    environment:
+      RADAR_INTERVAL_SECONDS: ${RADAR_INTERVAL_SECONDS:-86400}  # once a day
+    # Secrets (API keys) live in .env next to this file, never in git.
+    # required: false means it's fine if .env doesn't exist yet.
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/app/data                         # SQLite DB survives restarts
+      - ./public:/app/public                     # the generated site
+      - ./radar.toml:/app/radar.toml:ro          # edit config without rebuilding
+
+  # A tiny web server so you can browse the site at http://<pi-address>:8080
+  web:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"                                # host port 8080 -> nginx port 80
+    volumes:
+      - ./public:/usr/share/nginx/html:ro        # serve whatever radar rendered
