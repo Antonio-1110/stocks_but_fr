@@ -39,3 +39,19 @@ summing to at most 1) to rebalance at the next open, or `None` to do nothing.
   happens if the collector simply hasn't updated that stock yet, so refresh
   data before trusting the last weeks of a run.
 - A stock with no price on the fill day is skipped and counted in the report.
+
+## Checked against real data (issue #23)
+
+On FinMind data collected 2026-10-09, `buy_and_hold` on 0050 matched 0050's
+dividend-adjusted return after costs:
+
+| Period | 0050 adjusted close | Backtest | Gap explained by |
+|---|---|---|---|
+| 2012-01-02 to 2019-12-31 | +148.94% | +146.52% | first-night gap (49.06 close to 49.50 open, +0.90%) and one buy commission (NTD 4,271) |
+| 2020-01-02 to 2026-10-08 | +478.88% | +474.56% | first-night gap (97.65 to 98.30, +0.67%) and one buy commission (NTD 4,271) |
+
+The adjusted closes were rebuilt independently from raw closes, FinMind's
+dividend table (it matches Yuanta's published 0050 distributions) and the
+2025-06-18 1:4 split, and agree to the last digit except on the split day,
+where the exchange's rounded reference price moves the 2020+ figure by 0.03
+points. No engine change was needed.
