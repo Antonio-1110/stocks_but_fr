@@ -18,7 +18,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
-// The testdata files are samples in FinMind v4's response format.
+// The testdata files are real FinMind v4 responses, trimmed to a few rows.
 func load[T any](t *testing.T, name string) []T {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name))
@@ -33,56 +33,97 @@ func load[T any](t *testing.T, name string) []T {
 }
 
 func TestBuildUniverse(t *testing.T) {
-	got := buildUniverse(load[stockInfo](t, "TaiwanStockInfo.json"), load[delisting](t, "TaiwanStockDelisting.json"))
+	delisted := load[delisting](t, "TaiwanStockDelisting.json")
+	// Not in the saved response: a delisting older than a current listing,
+	// as for a stock listed again.
+	delisted = append(delisted, delisting{Date: "2001-01-02", StockID: "6488", Name: "環球晶"})
+	got := buildUniverse(load[stockInfo](t, "TaiwanStockInfo.json"), delisted)
 	var tickers []string
 	by := map[string]model.Company{}
 	for _, c := range got {
 		tickers = append(tickers, c.Ticker)
 		by[c.Ticker] = c
 	}
-	if want := "0050 006201 2330 2888 3474 6488"; strings.Join(tickers, " ") != want {
+	if want := "0050 006201 00732 2330 2888 3474 6488"; strings.Join(tickers, " ") != want {
 		t.Fatalf("tickers = %v, want %s", tickers, want)
 	}
 	if c := by["2330"]; c.Industry != "半導體業" || c.Exchange != "TWSE" || c.Name != "台積電" || !c.DelistedOn.IsZero() {
 		t.Errorf("2330 = %+v", c)
 	}
-	if c := by["6488"]; c.Exchange != "TPEx" {
-		t.Errorf("6488 exchange = %q", c.Exchange)
+	if c := by["6488"]; c.Exchange != "TPEx" || !c.DelistedOn.IsZero() {
+		t.Errorf("6488 = %+v, want listed on TPEx", c)
 	}
 	if c := by["3474"]; c.DelistedOn.Format("2006-01-02") != "2016-12-06" || c.Name != "華亞科" {
 		t.Errorf("3474 = %+v", c)
 	}
-	if c := by["2888"]; !c.DelistedOn.IsZero() {
-		t.Errorf("2888 is listed again, got delisted %v", c.DelistedOn)
+	// FinMind still lists 2888 with a date after its delisting, but not the
+	// current one: it is delisted.
+	if c := by["2888"]; c.DelistedOn.Format("2006-01-02") != "2025-07-24" {
+		t.Errorf("2888 delisted %v, want 2025-07-24", c.DelistedOn)
 	}
 }
 
-func TestMergePrices(t *testing.T) {
-	got := mergePrices("2330", load[priceRow](t, "TaiwanStockPrice_2330.json"), load[priceRow](t, "TaiwanStockPriceAdj_2330.json"))
+func TestMergePricesDividend(t *testing.T) {
+	events := buildEvents(load[dividendRow](t, "TaiwanStockDividendResult_2330.json"), nil, nil)
+	got := mergePrices("2330", load[priceRow](t, "TaiwanStockPrice_2330.json"), events)
 	if len(got) != 4 {
 		t.Fatalf("got %d rows", len(got))
 	}
+	// Ex-dividend on 2024-06-13: the reference price was 905.5 against a
+	// 909 close the day before.
 	p := got[0]
-	if p.Date.Format("2006-01-02") != "2024-06-11" || p.Close != 885 || p.Open != 877 || p.High != 889 || p.Low != 876 ||
-		p.Volume != 30116510 || p.Turnover != 26655064870 || math.Abs(p.AdjClose-881.15) > 1e-9 {
+	if p.Date.Format("2006-01-02") != "2024-06-11" || p.Close != 883 || p.Open != 892 || p.High != 895 || p.Low != 883 ||
+		p.Volume != 57435637 || p.Turnover != 51091497348 || math.Abs(p.AdjClose-883*905.5/909) > 1e-9 {
 		t.Errorf("first row = %+v", p)
 	}
-	if p := got[3]; p.AdjClose != p.Close {
-		t.Errorf("newest adj close %v != close %v", p.AdjClose, p.Close)
+	if p := got[1]; math.Abs(p.AdjClose-905.5) > 1e-9 {
+		t.Errorf("day before ex-dividend adj close = %v, want 905.5", p.AdjClose)
 	}
+	for _, p := range got[2:] {
+		if p.AdjClose != p.Close {
+			t.Errorf("%s adj close %v != close %v", p.Date.Format("2006-01-02"), p.AdjClose, p.Close)
+		}
+	}
+}
 
-	// A day missing from the adjusted series uses the next day's factor.
-	adj := load[priceRow](t, "TaiwanStockPriceAdj_2330.json")
-	got = mergePrices("2330", load[priceRow](t, "TaiwanStockPrice_2330.json"), adj[1:])
-	if want := 885 * 916.0 / 920; math.Abs(got[0].AdjClose-want) > 1e-9 {
-		t.Errorf("filled adj close = %v, want %v", got[0].AdjClose, want)
+func TestMergePricesSplit(t *testing.T) {
+	var splits []splitRow
+	for _, r := range load[splitRow](t, "TaiwanStockSplitPrice.json") {
+		if r.StockID == "0050" {
+			splits = append(splits, r)
+		}
+	}
+	// 0050 split 1:4 on 2025-06-18 (halted 06-11 to 06-17).
+	got := mergePrices("0050", load[priceRow](t, "split_0050_price.json"), buildEvents(nil, nil, splits))
+	if len(got) != 4 || math.Abs(got[1].AdjClose-47.16) > 1e-9 || math.Abs(got[0].AdjClose-183.7*47.16/188.65) > 1e-9 ||
+		got[2].AdjClose != got[2].Close {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestMergePricesCapitalReduction(t *testing.T) {
+	events := buildEvents(nil, load[reductionRow](t, "reduction_3481.json"), nil)
+	got := mergePrices("3481", load[priceRow](t, "reduction_3481_price.json"), events)
+	// Cash-refund reduction on 2022-10-11: last close 10.45, reference 10.49.
+	if len(got) != 4 || math.Abs(got[1].AdjClose-10.49) > 1e-9 || got[2].AdjClose != got[2].Close {
+		t.Fatalf("got %+v", got)
 	}
 }
 
 func TestMergeDropsSuspendedDays(t *testing.T) {
-	got := mergePrices("3474", load[priceRow](t, "TaiwanStockPrice_3474.json"), nil)
-	if len(got) != 1 || got[0].AdjClose != 48 {
+	raw := load[priceRow](t, "TaiwanStockPrice_3474.json")
+	raw = append(raw, priceRow{Date: "2016-11-30", StockID: "3474"}) // a day with no trades
+	got := mergePrices("3474", raw, nil)
+	if len(got) != 2 || got[1].AdjClose != 29.8 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestPaidDatasetIsAnError(t *testing.T) {
+	b, _ := os.ReadFile("testdata/paid_only.json")
+	_, err := parseEnvelope[priceRow]("x", b)
+	if err == nil || errors.Is(err, ErrStop) {
+		t.Fatalf("err = %v, want a non-stop error", err)
 	}
 }
 
@@ -149,19 +190,19 @@ func TestCollectBackfillsAndResumes(t *testing.T) {
 	ctx := context.Background()
 	day1 := time.Date(2024, 6, 14, 18, 0, 0, 0, taipei)
 
-	// Budget: universe (2) + 0050 (2) + one more ticker (2), then 402.
-	c, calls := fakeFinMind(t, 6)
+	// Budget: universe (2) + splits (1) + 0050 (3) + one more ticker (3), then 402.
+	c, calls := fakeFinMind(t, 9)
 	if err := collect(ctx, cfg, st, c, day1); err != nil {
 		t.Fatal(err)
 	}
 	cos, _ := st.Companies(model.MarketTW)
-	if len(cos) != 6 {
+	if len(cos) != 7 {
 		t.Fatalf("stored %d companies", len(cos))
 	}
 	if d, _ := st.LatestPriceDate(model.MarketTW, "0050"); d.Format("2006-01-02") != "2024-06-14" {
 		t.Fatalf("0050 latest = %v", d)
 	}
-	if (*calls)[2] != "TaiwanStockPrice_0050@2010-01-01" {
+	if (*calls)[3] != "TaiwanStockPrice_0050@2010-01-01" {
 		t.Errorf("benchmark not fetched first: %v", *calls)
 	}
 
@@ -178,7 +219,7 @@ func TestCollectBackfillsAndResumes(t *testing.T) {
 	if d, _ := st.LatestPriceDate(model.MarketTW, "2330"); d.Format("2006-01-02") != "2024-06-14" {
 		t.Errorf("2330 latest = %v", d)
 	}
-	if d, _ := st.LatestPriceDate(model.MarketTW, "3474"); d.Format("2006-01-02") != "2016-12-01" {
+	if d, _ := st.LatestPriceDate(model.MarketTW, "3474"); d.Format("2006-01-02") != "2016-11-29" {
 		t.Errorf("delisted 3474 latest = %v", d)
 	}
 
@@ -201,16 +242,16 @@ func TestDividendRescalesHistory(t *testing.T) {
 	p := func(date string, close, adj float64) model.Price {
 		return model.Price{Market: model.MarketTW, Ticker: "2330", Date: d(date), Close: close, AdjClose: adj}
 	}
-	if err := writePrices(st, "2330", time.Time{}, []model.Price{p("2024-06-11", 885, 885), p("2024-06-12", 920, 920)}); err != nil {
+	if err := writePrices(st, "2330", time.Time{}, []model.Price{p("2024-06-11", 883, 883), p("2024-06-12", 909, 909)}); err != nil {
 		t.Fatal(err)
 	}
-	// Ex-dividend on 06-13: FinMind now reports 06-12 adjusted to 916.
-	if err := writePrices(st, "2330", d("2024-06-12"), []model.Price{p("2024-06-12", 920, 916), p("2024-06-13", 914, 914)}); err != nil {
+	// Ex-dividend on 06-13: the next run adjusts 06-12 to 905.5.
+	if err := writePrices(st, "2330", d("2024-06-12"), []model.Price{p("2024-06-12", 909, 905.5), p("2024-06-13", 919, 919)}); err != nil {
 		t.Fatal(err)
 	}
 	var adj float64
 	st.DB.QueryRow(`SELECT adj_close FROM prices WHERE ticker = '2330' AND date = '2024-06-11'`).Scan(&adj)
-	if want := 885 * 916.0 / 920; math.Abs(adj-want) > 1e-9 {
+	if want := 883 * 905.5 / 909; math.Abs(adj-want) > 1e-9 {
 		t.Errorf("rescaled adj close = %v, want %v", adj, want)
 	}
 }

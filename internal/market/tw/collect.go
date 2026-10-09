@@ -47,6 +47,17 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 	if err != nil {
 		return err
 	}
+	// Splits come for the whole market in one request. Without them adjusted
+	// closes would be wrong, so prices wait for the next run.
+	splitRows, err := Fetch[splitRow](ctx, c, "TaiwanStockSplitPrice", map[string]string{"start_date": cfg.Run.HistoryStart})
+	if err != nil {
+		log.Printf("tw: splits unavailable, skipping prices this run: %v", err)
+		return nil
+	}
+	splits := map[string][]splitRow{}
+	for _, r := range splitRows {
+		splits[r.StockID] = append(splits[r.StockID], r)
+	}
 	today := now.Format("2006-01-02")
 	checked, err := loadChecks(st)
 	if err != nil {
@@ -56,7 +67,7 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 	// The benchmark goes first; its newest date is the latest trading day.
 	bench := cfg.Backtest.Benchmark
 	if checked[bench] != today {
-		if err := updateTicker(ctx, cfg, st, c, bench, today); err != nil {
+		if err := updateTicker(ctx, cfg, st, c, bench, today, splits[bench]); err != nil {
 			if errors.Is(err, ErrStop) || ctx.Err() != nil {
 				log.Printf("tw: stopping: %v", err)
 				return nil
@@ -98,7 +109,7 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 
 	done := 0
 	for _, j := range jobs {
-		err := updateTicker(ctx, cfg, st, c, j.ticker, today)
+		err := updateTicker(ctx, cfg, st, c, j.ticker, today, splits[j.ticker])
 		if errors.Is(err, ErrStop) || ctx.Err() != nil {
 			log.Printf("tw: stopping: %v", err)
 			break
@@ -151,12 +162,12 @@ func updateUniverse(ctx context.Context, cfg config.Config, st *store.Store, c *
 	return st.UpsertCompanies(universe)
 }
 
-// updateTicker fetches prices from the day after the newest stored one (or
-// from history_start) and writes them. The first fetched day overlaps the
-// newest stored day: if its adjusted close changed, a dividend or split
+// updateTicker fetches prices and adjustment events from the newest stored
+// day (or from history_start) and writes them. The first fetched day overlaps
+// the newest stored day: if its adjusted close changed, a dividend or split
 // happened since, and all older adjusted closes are rescaled by the same
 // ratio, which keeps the series exactly back-adjusted.
-func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, ticker, today string) error {
+func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, ticker, today string, splits []splitRow) error {
 	latest, err := st.LatestPriceDate(model.MarketTW, ticker)
 	if err != nil {
 		return err
@@ -170,11 +181,21 @@ func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *Fi
 	if err != nil {
 		return err
 	}
-	adj, err := Fetch[priceRow](ctx, c, "TaiwanStockPriceAdj", params)
+	divs, err := Fetch[dividendRow](ctx, c, "TaiwanStockDividendResult", params)
 	if err != nil {
 		return err
 	}
-	prices := mergePrices(ticker, raw, adj)
+	reds, err := Fetch[reductionRow](ctx, c, "TaiwanStockCapitalReductionReferencePrice", params)
+	if err != nil {
+		return err
+	}
+	var recent []splitRow
+	for _, r := range splits {
+		if r.Date >= from {
+			recent = append(recent, r)
+		}
+	}
+	prices := mergePrices(ticker, raw, buildEvents(divs, reds, recent))
 	if err := writePrices(st, ticker, latest, prices); err != nil {
 		return err
 	}

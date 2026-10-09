@@ -1,5 +1,5 @@
-{"msg":"success","status":200,"data":[
-{"date":"2016-12-06","stock_id":"3474","stock_name":"華亞科"},
-{"date":"2012-01-02","stock_id":"2888","stock_name":"新光金"},
-{"date":"2019-05-13","stock_id":"912000","stock_name":"晨訊科"}
+{"msg":"success", "status":200,"data":[
+{"date": "2023-04-21", "stock_id": "00732", "stock_name": "國泰RMB短期報酬"},
+{"date": "2025-07-24", "stock_id": "2888", "stock_name": "新光金"},
+{"date": "2016-12-06", "stock_id": "3474", "stock_name": "華亞科"}
 ]}

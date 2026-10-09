@@ -1,0 +1,4 @@
+{"msg":"success", "status":200,"data":[
+{"date": "2024-03-18", "stock_id": "2330", "before_price": 753.0, "after_price": 749.5, "stock_and_cache_dividend": 3.499789, "stock_or_cache_dividend": "息", "max_price": 824.0, "min_price": 675.0, "open_price": 750.0, "reference_price": 749.5},
+{"date": "2024-06-13", "stock_id": "2330", "before_price": 909.0, "after_price": 905.5, "stock_and_cache_dividend": 3.499789, "stock_or_cache_dividend": "息", "max_price": 996.0, "min_price": 815.0, "open_price": 906.0, "reference_price": 905.5}
+]}

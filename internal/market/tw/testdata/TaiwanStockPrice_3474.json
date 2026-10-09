@@ -1,4 +1,4 @@
-{"msg":"success","status":200,"data":[
-{"date":"2016-12-01","stock_id":"3474","Trading_Volume":18233000,"Trading_money":875184000,"open":48.0,"max":48.1,"min":47.95,"close":48.0,"spread":0.0,"Trading_turnover":2104},
-{"date":"2016-12-02","stock_id":"3474","Trading_Volume":0,"Trading_money":0,"open":0.0,"max":0.0,"min":0.0,"close":0.0,"spread":0.0,"Trading_turnover":0}
+{"msg":"success", "status":200,"data":[
+{"date": "2016-11-28", "stock_id": "3474", "Trading_Volume": 10605664, "Trading_money": 316094633, "open": 29.8, "max": 29.85, "min": 29.8, "close": 29.8, "spread": 0.05, "Trading_turnover": 3253},
+{"date": "2016-11-29", "stock_id": "3474", "Trading_Volume": 19139105, "Trading_money": 570702161, "open": 29.8, "max": 29.85, "min": 29.8, "close": 29.8, "spread": 0.0, "Trading_turnover": 7671}
 ]}

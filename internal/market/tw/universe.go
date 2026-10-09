@@ -15,7 +15,7 @@ type stockInfo struct {
 	StockID  string `json:"stock_id"`
 	Name     string `json:"stock_name"`
 	Type     string `json:"type"` // "twse", "tpex", "emerging"
-	Date     string `json:"date"` // when FinMind last saw the row
+	Date     string `json:"date"` // when FinMind last updated the row; can be "None"
 }
 
 // delisting is one row of FinMind TaiwanStockDelisting.
@@ -40,7 +40,18 @@ func parseDay(s string) time.Time {
 
 // buildUniverse merges current listings and the delisting table. Emerging
 // board (興櫃) stocks, indices and warrants are left out.
+//
+// TaiwanStockInfo keeps delisted stocks too, with an older date (and its
+// dates can be later than the delisting itself). Only rows carrying the
+// table's newest date are current listings, so only those can override a
+// delisting (a stock listed again, or a reused code).
 func buildUniverse(info []stockInfo, delisted []delisting) []model.Company {
+	var current time.Time
+	for _, r := range info {
+		if d := parseDay(r.Date); d.After(current) {
+			current = d
+		}
+	}
 	byTicker := map[string]*model.Company{}
 	seen := map[string]time.Time{} // newest info date per ticker
 	for _, r := range info {
@@ -68,7 +79,7 @@ func buildUniverse(info []stockInfo, delisted []delisting) []model.Company {
 		if c == nil {
 			c = &model.Company{Market: model.MarketTW, Ticker: r.StockID, Name: r.Name}
 			byTicker[r.StockID] = c
-		} else if seen[r.StockID].After(d) {
+		} else if s := seen[r.StockID]; s.Equal(current) && s.After(d) {
 			// Listed again after this delisting (or the code was reused).
 			continue
 		}

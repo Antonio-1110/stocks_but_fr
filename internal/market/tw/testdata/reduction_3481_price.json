@@ -1,0 +1,6 @@
+{"msg":"success", "status":200,"data":[
+{"date": "2022-09-27", "stock_id": "3481", "Trading_Volume": 51185199, "Trading_money": 547967574, "open": 10.55, "max": 10.9, "min": 10.55, "close": 10.7, "spread": 0.3, "Trading_turnover": 10128},
+{"date": "2022-09-28", "stock_id": "3481", "Trading_Volume": 62051789, "Trading_money": 656110024, "open": 10.8, "max": 10.8, "min": 10.4, "close": 10.45, "spread": -0.25, "Trading_turnover": 13081},
+{"date": "2022-10-11", "stock_id": "3481", "Trading_Volume": 112469013, "Trading_money": 1254920638, "open": 11.05, "max": 11.45, "min": 10.8, "close": 11.45, "spread": 0.0, "Trading_turnover": 29511},
+{"date": "2022-10-12", "stock_id": "3481", "Trading_Volume": 90097886, "Trading_money": 1008023056, "open": 11.35, "max": 11.5, "min": 10.85, "close": 11.5, "spread": 0.05, "Trading_turnover": 22283}
+]}

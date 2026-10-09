@@ -1,4 +1,0 @@
-{"msg":"success","status":200,"data":[
-{"date":"2016-12-01","stock_id":"3474","Trading_Volume":18233000,"Trading_money":875184000,"open":48.0,"max":48.1,"min":47.95,"close":48.0,"spread":0.0,"Trading_turnover":2104},
-{"date":"2016-12-02","stock_id":"3474","Trading_Volume":0,"Trading_money":0,"open":0.0,"max":0.0,"min":0.0,"close":0.0,"spread":0.0,"Trading_turnover":0}
-]}
