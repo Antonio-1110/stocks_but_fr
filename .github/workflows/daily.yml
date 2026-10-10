@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 300
     permissions:
       contents: write   # create the `data` release and replace its asset
+      actions: write    # start the next run while a backfill is incomplete
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -79,7 +80,9 @@ jobs:
           # The last collect step sends Telegram alerts (internal/alerts).
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: ./radar collect
+        run: |
+          set -o pipefail
+          ./radar collect 2>&1 | tee collect.log
 
       # Upload under a temporary name, then swap, so a failed upload never
       # leaves the release without a database.
@@ -106,6 +109,20 @@ jobs:
           id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" \
             -q ".assets[] | select(.name == \"$DB_ASSET.new\") | .id")
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$id" -f name="$DB_ASSET" >/dev/null
+
+      # GitHub starts few of the hourly scheduled runs, so while a backfill is
+      # incomplete each run starts the next one. The `daily` group keeps at
+      # most one running and one queued, and the FinMind client paces requests
+      # under the hourly limit across back-to-back runs. Chaining stops once no
+      # collector reports work left.
+      - name: Start the next run if a backfill is incomplete
+        run: |
+          if grep -qE 'FinMind: stopping:|budget or quota reached|TPEx: fetched [0-9]+ days, [1-9][0-9]* left' collect.log; then
+            echo "Backfill incomplete; starting the next run"
+            gh workflow run daily.yml --ref "$GITHUB_REF_NAME"
+          else
+            echo "Nothing left to backfill; not chaining"
+          fi
 
       - name: Render
         run: ./radar render
