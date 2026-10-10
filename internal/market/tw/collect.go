@@ -2,12 +2,11 @@ package tw
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
@@ -17,43 +16,86 @@ import (
 
 var taipei = time.FixedZone("Asia/Taipei", 8*60*60)
 
-// checksTable records when each ticker was last fetched, so a ticker FinMind
-// has no prices for is tried once a day, and a delisted one only once.
-// It is this collector's bookkeeping, not part of the shared schema.
+// checksTable records when each ticker was last fetched from FinMind, so a
+// ticker FinMind has no prices for is tried once a day, and a delisted one
+// only once. It is this collector's bookkeeping, not part of the shared schema.
 const checksTable = `CREATE TABLE IF NOT EXISTS tw_price_checks (
 	ticker     TEXT PRIMARY KEY,
 	checked_on TEXT NOT NULL,
 	rows       INTEGER NOT NULL
 )`
 
-// Collect is the `radar collect` step: refresh the universe, then backfill or
-// update prices until everything is current or this run's budget is spent.
+// eventsFullTable lists tickers whose FinMind events are stored back to
+// history_start.
+const eventsFullTable = `CREATE TABLE IF NOT EXISTS tw_events_full (ticker TEXT PRIMARY KEY)`
+
+// Collect is the `radar collect` step. OTC (TPEx) stocks come from TPEx's
+// whole-market daily files, one request per day for every stock. TWSE blocks
+// cloud addresses after a request or two, so TWSE-listed stocks still come
+// from FinMind, one stock at a time. Both run at once, then adjusted closes
+// are rebuilt where events or backfilled days changed them.
 func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
 	// Revenue and flows run after this step and share the FinMind budget.
-	return collect(ctx, cfg, st, ForStep("tw-prices", 2), time.Now().In(taipei))
+	return collect(ctx, cfg, st, ForStep("tw-prices", 2), NewTPEx(), time.Now().In(taipei))
 }
 
-func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, now time.Time) error {
-	if _, err := st.DB.Exec(checksTable); err != nil {
-		return err
+func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, tp *TPEx, now time.Time) error {
+	for _, q := range []string{checksTable, eventsTable, eventsFullTable, daysTable, eventYearsTable} {
+		if _, err := st.DB.Exec(q); err != nil {
+			return err
+		}
 	}
+	start := parseDay(cfg.Run.HistoryStart)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	dirty := newDirty()
+
 	if err := updateUniverse(ctx, cfg, st, c); err != nil {
+		log.Printf("tw: %v (keeping the stored universe)", err)
+	}
+	// Splits come for the whole market in one request.
+	if rows, err := Fetch[splitRow](ctx, c, "TaiwanStockSplitPrice", map[string]string{"start_date": cfg.Run.HistoryStart}); err != nil {
+		log.Printf("tw: splits unavailable this run: %v", err)
+	} else if err := writeEvents(st, dirty, splitEvents(rows), today); err != nil {
 		return err
 	}
+
+	var wg sync.WaitGroup
+	var tpexErr error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := tpexEvents(ctx, tp, st, dirty, start.Year(), now); err != nil {
+			log.Printf("tw: TPEx events: %v", err)
+		}
+		fetched, left, err := tpexDays(ctx, tp, st, dirty, start, now)
+		log.Printf("tw: TPEx: fetched %d days, %d left for later runs", fetched, left)
+		tpexErr = err
+	}()
+	finmindErr := finmindTickers(ctx, cfg, st, c, dirty, now)
+	wg.Wait()
+	if tpexErr != nil {
+		log.Printf("tw: TPEx: %v", tpexErr)
+	}
+	if finmindErr != nil {
+		return finmindErr
+	}
+
+	n, err := rebuild(st, dirty)
+	if err != nil {
+		return fmt.Errorf("rebuild adjusted closes: %w", err)
+	}
+	log.Printf("tw: rebuilt adjusted closes for %d tickers", n)
+	return nil
+}
+
+// finmindTickers backfills or updates TWSE-listed stocks one at a time from
+// FinMind, until they are current or the FinMind budget is spent. OTC stocks
+// are left to the TPEx files. A delisted stock is fetched once, unless its
+// stored prices already reach its delisting (it traded on TPEx).
+func finmindTickers(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, dirty *dirtySet, now time.Time) error {
 	companies, err := st.Companies(model.MarketTW)
 	if err != nil {
 		return err
-	}
-	// Splits come for the whole market in one request. Without them adjusted
-	// closes would be wrong, so prices wait for the next run.
-	splitRows, err := Fetch[splitRow](ctx, c, "TaiwanStockSplitPrice", map[string]string{"start_date": cfg.Run.HistoryStart})
-	if err != nil {
-		log.Printf("tw: splits unavailable, skipping prices this run: %v", err)
-		return nil
-	}
-	splits := map[string][]splitRow{}
-	for _, r := range splitRows {
-		splits[r.StockID] = append(splits[r.StockID], r)
 	}
 	today := now.Format("2006-01-02")
 	checked, err := loadChecks(st)
@@ -64,9 +106,9 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 	// The benchmark goes first; its newest date is the latest trading day.
 	bench := cfg.Backtest.Benchmark
 	if checked[bench] != today {
-		if err := updateTicker(ctx, cfg, st, c, bench, today, splits[bench]); err != nil {
+		if err := updateTicker(ctx, cfg, st, c, dirty, bench, now); err != nil {
 			if errors.Is(err, ErrStop) || ctx.Err() != nil {
-				log.Printf("tw: stopping: %v", err)
+				log.Printf("tw: FinMind: stopping: %v", err)
 				return nil
 			}
 			log.Printf("tw: %s: %v", bench, err)
@@ -86,17 +128,18 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 	}
 	var jobs []job
 	for _, co := range companies {
-		if co.Ticker == bench || checked[co.Ticker] == today {
+		if co.Ticker == bench || co.Exchange == "TPEx" || checked[co.Ticker] == today {
 			continue
-		}
-		if !co.DelistedOn.IsZero() && checked[co.Ticker] != "" {
-			continue // a delisted stock's history is complete after one fetch
 		}
 		latest, err := st.LatestPriceDate(model.MarketTW, co.Ticker)
 		if err != nil {
 			return err
 		}
-		if !latest.IsZero() && !latest.Before(calendar) {
+		if !co.DelistedOn.IsZero() {
+			if checked[co.Ticker] != "" || (!latest.IsZero() && latest.AddDate(0, 0, 10).After(co.DelistedOn)) {
+				continue
+			}
+		} else if !latest.IsZero() && !latest.Before(calendar) {
 			continue
 		}
 		jobs = append(jobs, job{co.Ticker, latest})
@@ -106,9 +149,9 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 
 	done := 0
 	for _, j := range jobs {
-		err := updateTicker(ctx, cfg, st, c, j.ticker, today, splits[j.ticker])
+		err := updateTicker(ctx, cfg, st, c, dirty, j.ticker, now)
 		if errors.Is(err, ErrStop) || ctx.Err() != nil {
-			log.Printf("tw: stopping: %v", err)
+			log.Printf("tw: FinMind: stopping: %v", err)
 			break
 		}
 		if err != nil {
@@ -117,7 +160,7 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 		}
 		done++
 	}
-	log.Printf("tw: prices updated for %d of %d stale tickers; the rest resume next run", done, len(jobs))
+	log.Printf("tw: FinMind: prices updated for %d of %d stale TWSE tickers; the rest resume next run", done, len(jobs))
 	return nil
 }
 
@@ -159,12 +202,11 @@ func updateUniverse(ctx context.Context, cfg config.Config, st *store.Store, c *
 	return st.UpsertCompanies(universe)
 }
 
-// updateTicker fetches prices and adjustment events from the newest stored
-// day (or from history_start) and writes them. The first fetched day overlaps
-// the newest stored day: if its adjusted close changed, a dividend or split
-// happened since, and all older adjusted closes are rescaled by the same
-// ratio, which keeps the series exactly back-adjusted.
-func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, ticker, today string, splits []splitRow) error {
+// updateTicker fetches one stock's raw prices and adjustment events from
+// FinMind, from its newest stored day (or from history_start). The newest
+// stored day is fetched again; that is harmless, and adjusted closes are
+// rebuilt afterwards if an event or an older day changed.
+func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, dirty *dirtySet, ticker string, now time.Time) error {
 	latest, err := st.LatestPriceDate(model.MarketTW, ticker)
 	if err != nil {
 		return err
@@ -178,74 +220,39 @@ func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *Fi
 	if err != nil {
 		return err
 	}
-	divs, err := Fetch[dividendRow](ctx, c, "TaiwanStockDividendResult", params)
+	// Events are stored since this collector rebuilds adjusted closes from
+	// them. A ticker priced before that has none stored, so its events are
+	// fetched from history_start once (same number of requests).
+	var full int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM tw_events_full WHERE ticker = ?`, ticker).Scan(&full); err != nil {
+		return err
+	}
+	evParams := params
+	if full == 0 {
+		evParams = map[string]string{"data_id": ticker, "start_date": cfg.Run.HistoryStart}
+	}
+	divs, err := Fetch[dividendRow](ctx, c, "TaiwanStockDividendResult", evParams)
 	if err != nil {
 		return err
 	}
-	reds, err := Fetch[reductionRow](ctx, c, "TaiwanStockCapitalReductionReferencePrice", params)
+	reds, err := Fetch[reductionRow](ctx, c, "TaiwanStockCapitalReductionReferencePrice", evParams)
 	if err != nil {
 		return err
 	}
-	var recent []splitRow
-	for _, r := range splits {
-		if r.Date >= from {
-			recent = append(recent, r)
-		}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if err := writeEvents(st, dirty, finmindEvents(ticker, divs, reds), today); err != nil {
+		return err
 	}
-	prices := mergePrices(ticker, raw, buildEvents(divs, reds, recent))
-	if err := writePrices(st, ticker, latest, prices); err != nil {
+	prices := mergePrices(ticker, raw, nil)
+	if err := writeRaw(st, dirty, prices); err != nil {
+		return err
+	}
+	if _, err := st.DB.Exec(`INSERT OR IGNORE INTO tw_events_full (ticker) VALUES (?)`, ticker); err != nil {
 		return err
 	}
 	_, err = st.DB.Exec(`INSERT OR REPLACE INTO tw_price_checks (ticker, checked_on, rows) VALUES (?, ?, ?)`,
-		ticker, today, len(prices))
+		ticker, now.Format("2006-01-02"), len(prices))
 	return err
-}
-
-// writePrices rescales older adjusted closes (see updateTicker) and upserts
-// the new rows in one transaction, so a failure can't apply the ratio twice.
-func writePrices(st *store.Store, ticker string, latest time.Time, prices []model.Price) error {
-	tx, err := st.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if !latest.IsZero() {
-		day := latest.Format("2006-01-02")
-		var old sql.NullFloat64
-		err := tx.QueryRow(`SELECT adj_close FROM prices WHERE market = ? AND ticker = ? AND date = ?`,
-			model.MarketTW, ticker, day).Scan(&old)
-		if err != nil {
-			return err
-		}
-		for _, p := range prices {
-			if !p.Date.Equal(latest) {
-				continue
-			}
-			if old.Valid && old.Float64 > 0 {
-				if ratio := p.AdjClose / old.Float64; math.Abs(ratio-1) > 1e-6 {
-					if _, err := tx.Exec(`UPDATE prices SET adj_close = adj_close * ?
-						WHERE market = ? AND ticker = ? AND date < ?`, ratio, model.MarketTW, ticker, day); err != nil {
-						return err
-					}
-				}
-			}
-			break
-		}
-	}
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO prices
-		(market, ticker, date, open, high, low, close, adj_close, volume, turnover)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	for _, p := range prices {
-		if _, err := stmt.Exec(p.Market, p.Ticker, p.Date.Format("2006-01-02"),
-			p.Open, p.High, p.Low, p.Close, p.AdjClose, p.Volume, p.Turnover); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
 }
 
 func loadChecks(st *store.Store) (map[string]string, error) {

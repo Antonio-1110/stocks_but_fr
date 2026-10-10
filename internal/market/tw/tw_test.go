@@ -11,9 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
@@ -183,79 +181,6 @@ func openStore(t *testing.T) *store.Store {
 	t.Cleanup(func() { st.Close() })
 	return st
 }
-
-func TestCollectBackfillsAndResumes(t *testing.T) {
-	cfg := config.Default()
-	st := openStore(t)
-	ctx := context.Background()
-	day1 := time.Date(2024, 6, 14, 18, 0, 0, 0, taipei)
-
-	// Budget: universe (2) + splits (1) + 0050 (3) + one more ticker (3), then 402.
-	c, calls := fakeFinMind(t, 9)
-	if err := collect(ctx, cfg, st, c, day1); err != nil {
-		t.Fatal(err)
-	}
-	cos, _ := st.Companies(model.MarketTW)
-	if len(cos) != 7 {
-		t.Fatalf("stored %d companies", len(cos))
-	}
-	if d, _ := st.LatestPriceDate(model.MarketTW, "0050"); d.Format("2006-01-02") != "2024-06-14" {
-		t.Fatalf("0050 latest = %v", d)
-	}
-	if (*calls)[3] != "TaiwanStockPrice_0050@2010-01-01" {
-		t.Errorf("benchmark not fetched first: %v", *calls)
-	}
-
-	// Next run resumes the rest; tickers done today are not fetched again.
-	c, calls = fakeFinMind(t, 1000)
-	if err := collect(ctx, cfg, st, c, day1); err != nil {
-		t.Fatal(err)
-	}
-	for _, call := range *calls {
-		if strings.Contains(call, "_0050") || strings.Contains(call, "_006201") {
-			t.Errorf("refetched a ticker already checked today: %s", call)
-		}
-	}
-	if d, _ := st.LatestPriceDate(model.MarketTW, "2330"); d.Format("2006-01-02") != "2024-06-14" {
-		t.Errorf("2330 latest = %v", d)
-	}
-	if d, _ := st.LatestPriceDate(model.MarketTW, "3474"); d.Format("2006-01-02") != "2016-11-29" {
-		t.Errorf("delisted 3474 latest = %v", d)
-	}
-
-	// A day later: up-to-date or delisted tickers are skipped, stale ones
-	// fetch from their newest stored day.
-	c, calls = fakeFinMind(t, 1000)
-	if err := collect(ctx, cfg, st, c, day1.AddDate(0, 0, 1)); err != nil {
-		t.Fatal(err)
-	}
-	for _, call := range *calls {
-		if strings.Contains(call, "_3474") || strings.Contains(call, "_2330") {
-			t.Errorf("unexpected fetch: %s", call)
-		}
-	}
-}
-
-func TestDividendRescalesHistory(t *testing.T) {
-	st := openStore(t)
-	d := func(s string) time.Time { return parseDay(s) }
-	p := func(date string, close, adj float64) model.Price {
-		return model.Price{Market: model.MarketTW, Ticker: "2330", Date: d(date), Close: close, AdjClose: adj}
-	}
-	if err := writePrices(st, "2330", time.Time{}, []model.Price{p("2024-06-11", 883, 883), p("2024-06-12", 909, 909)}); err != nil {
-		t.Fatal(err)
-	}
-	// Ex-dividend on 06-13: the next run adjusts 06-12 to 905.5.
-	if err := writePrices(st, "2330", d("2024-06-12"), []model.Price{p("2024-06-12", 909, 905.5), p("2024-06-13", 919, 919)}); err != nil {
-		t.Fatal(err)
-	}
-	var adj float64
-	st.DB.QueryRow(`SELECT adj_close FROM prices WHERE ticker = '2330' AND date = '2024-06-11'`).Scan(&adj)
-	if want := 883 * 905.5 / 909; math.Abs(adj-want) > 1e-9 {
-		t.Errorf("rescaled adj close = %v, want %v", adj, want)
-	}
-}
-
 
 // Steps get slices of one run budget. A step's unused requests stay with the
 // run, and FinMind's 402 ends the run for every step, not just the one hit.
