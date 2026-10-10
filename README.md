@@ -24,6 +24,13 @@ hour (so evening runs pick up the day's close) (and on demand from the Actions t
 
     gh release download data --pattern radar.db.gz --dir data && gunzip data/radar.db.gz
 
+## Calendar
+
+`public/calendar.html` (linked from the dashboard) marks 法說會, ex-dividend
+and ex-rights days, shareholder meetings and the revenue/financial report
+deadlines. It reads MOPS and the TWSE/TPEx open data directly (no FinMind
+requests), each source at most every 6 hours.
+
 ## Environment variables
 
 Every new one gets listed here.

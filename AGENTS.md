@@ -85,6 +85,7 @@ internal/market/tw/   Taiwan universe (incl. delisted) + daily prices
   revenue/            monthly revenue (月營收)
   flows/              institutional flows (三大法人)
 internal/site/        static dashboard generator
+internal/calendar/    company event calendar (法說會, 除權息, 股東會): collect + page
 web/                  dashboard templates and static assets
 .github/workflows/    scheduled run + Pages deploy
 backtest/             Python backtester; reads data/radar.db + radar.toml

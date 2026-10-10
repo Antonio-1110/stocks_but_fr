@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* Calendar-only rules; theme tokens come from static/style.css. */
+.nav { margin: 0 0 8px; font-size: .85rem; }
+.k-conference { --k: var(--cyan); }
+.k-exdiv { --k: var(--yellow); }
+.k-meeting { --k: var(--violet); }
+.k-deadline { --k: var(--magenta); }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.kinds label {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; cursor: pointer;
+  border: 1px solid var(--k); color: var(--k); font-size: .8rem; user-select: none;
+}
+.kinds input { accent-color: var(--k); margin: 0; }
+.kinds label:has(input:not(:checked)) { opacity: .4; }
+
+.months { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.month h3 { margin: 0 0 6px; font: 600 .85rem/1.2 var(--display); letter-spacing: .12em; color: var(--cyan); }
+.grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.grid th {
+  position: static; cursor: default; padding: 3px 0; text-align: center; font-size: .62rem;
+  border-bottom: 1px solid var(--panel-edge); color: var(--muted); background: none;
+}
+.grid td { height: 58px; padding: 2px 3px; border: 1px solid var(--line); vertical-align: top; }
+.grid td.out { border-color: transparent; }
+.grid td.past { opacity: .5; }
+.grid td.today { box-shadow: inset 0 0 0 1px var(--yellow), 0 0 10px rgba(249, 240, 2, 0.35); }
+.grid a.cell { display: block; height: 100%; color: inherit; }
+.grid a.cell:hover { text-shadow: none; background: rgba(0, 240, 255, 0.07); }
+.grid .dn { display: block; font-size: .72rem; color: var(--muted); }
+.grid td.today .dn { color: var(--yellow); }
+.grid .c { display: block; font-size: .62rem; line-height: 1.25; color: var(--k); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid .c[hidden] { display: none; }
+
+.agenda { margin: 0; padding: 0; list-style: none; }
+.day { padding: 8px 0 6px; border-bottom: 1px solid var(--panel-edge); scroll-margin-top: 12px; }
+.day h3 { margin: 0 0 4px; font: 600 .85rem/1.2 var(--display); letter-spacing: .08em; color: var(--cyan); }
+.day.past h3 { color: var(--muted); }
+.day.today h3 { color: var(--yellow); }
+.day.today h3::after { content: " // TODAY"; color: var(--magenta); }
+.ev { display: grid; grid-template-columns: 5.2em minmax(8em, 14em) minmax(7em, 11em) 1fr; gap: 2px 10px; padding: 3px 0 3px 8px; border-left: 2px solid var(--k); margin: 2px 0; }
+.ev .kl { color: var(--k); font-size: .78rem; }
+.ev .who { font-family: var(--cjk), var(--mono); }
+.ev .who b { color: var(--cyan); font-family: var(--mono); margin-right: 3px; }
+.ev .ttl { color: var(--fg); }
+.ev .det { color: var(--muted); font-family: var(--cjk), var(--mono); font-size: .85rem; overflow-wrap: anywhere; }
+.ev[hidden] { display: none; }
+.empty { margin: 12px 0; }
+.etf-toggle { border-color: var(--muted) !important; color: var(--muted) !important; }
+@media (max-width: 720px) {
+  .months { grid-template-columns: 1fr; }
+  /* Undo the dashboard's phone card layout for tables. */
+  .grid { display: table; }
+  .grid thead { display: table-header-group; position: static; padding: 0; background: none; }
+  .grid tbody { display: table-row-group; }
+  .grid thead tr, .grid tbody tr { display: table-row; padding: 0; border: 0; }
+  .grid th, .grid td { display: table-cell; position: static; border: 1px solid var(--line); font-size: .62rem; }
+  .grid th { border: 0; border-bottom: 1px solid var(--panel-edge); }
+  .grid td { height: 46px; padding: 1px 2px; }
+  .grid td.out { border-color: transparent; }
+  .grid .c .lbl { display: none; }
+  .grid .c { display: inline-block; margin-right: 3px; font-size: .7rem; }
+  .ev { grid-template-columns: 4.6em 1fr; }
+  .ev .ttl, .ev .det { grid-column: 2; }
+}
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<header>
+  <p class="sys">SYS://TW-RADAR/CALENDAR <span class="blink">_</span></p>
+  <h1 data-text="Calendar">Calendar</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b> <span class="sep">//</span> <b>{{.Total}} events</b></p>
+  <p class="nav"><a href="index.html">&lt; back to companies</a></p>
+</header>
+
+<main>
+<section class="panel">
+  <h2><span class="idx">01</span> Filter</h2>
+  <div class="filters">
+    <input id="q" type="search" placeholder="&gt; filter: ticker, name, keyword" aria-label="Filter">
+  </div>
+  <div class="kinds">
+    {{range .Kinds}}<label class="k-{{.ID}}"><input type="checkbox" data-kind="{{.ID}}" checked> {{.Label}}</label>{{end}}
+    <label class="etf-toggle"><input type="checkbox" id="etf"> 含 ETF</label>
+  </div>
+  <p class="muted hint">法說會 from MOPS 法人說明會一覽表; 除權息 from the TWSE and TPEx 預告表; 股東會 from the MOPS meeting summaries; 申報期限 are the statutory dates for general companies (a holiday moves them to the next business day). ETFs (codes starting 00) are hidden unless 含 ETF is ticked. Tap a day to jump to its list.</p>
+</section>
+
+<section class="panel">
+  <h2><span class="idx">02</span> Month view</h2>
+  <div class="months">
+  {{range .Months}}
+    <div class="month">
+      <h3>{{.Label}}</h3>
+      <table class="grid">
+        <thead><tr><th>一</th><th>二</th><th>三</th><th>四</th><th>五</th><th>六</th><th>日</th></tr></thead>
+        <tbody>
+        {{range .Weeks}}<tr>{{range .}}{{if .Date}}<td class="{{if .Today}}today{{else if .Past}}past{{end}}" data-date="{{.Date}}">{{if .HasDays}}<a class="cell" href="#d-{{.Date}}">{{else}}<span class="cell">{{end}}<span class="dn">{{.Day}}</span>{{range .Counts}}<span class="c k-{{.Kind}}" data-kind="{{.Kind}}"><span class="lbl">{{.Short}} </span><span class="n">{{.N}}</span></span>{{end}}{{if .HasDays}}</a>{{else}}</span>{{end}}</td>{{else}}<td class="out"></td>{{end}}{{end}}</tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{end}}
+  </div>
+</section>
+
+<section class="panel">
+  <h2><span class="idx">03</span> Agenda <span class="count" id="count">{{.Total}}</span></h2>
+  {{if .Days}}
+  <ul class="agenda" id="agenda">
+  {{range .Days}}
+    <li class="day{{if .Today}} today{{else if .Past}} past{{end}}" id="d-{{.Date}}">
+      <h3>{{.Label}}</h3>
+      {{range .Rows}}
+      <div class="ev k-{{.Kind}}" data-kind="{{.Kind}}"{{if .ETF}} data-etf{{end}} data-s="{{.Search}}">
+        <span class="kl">{{.KindLabel}}</span>
+        <span class="who">{{if .Link}}<a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a>{{else}}<span class="muted">全市場</span>{{end}}</span>
+        <span class="ttl">{{.Title}}{{if .Until}} → {{.Until}}{{end}}</span>
+        <span class="det">{{.Detail}}</span>
+      </div>
+      {{end}}
+    </li>
+  {{end}}
+  </ul>
+  <p class="muted empty" id="none" hidden>Nothing matches the filter.</p>
+  {{else}}
+  <p class="muted empty">No events in the store yet. Run <code>radar collect</code> first.</p>
+  {{end}}
+</section>
+</main>
+
+<footer class="muted">Dates are as the companies filed them; check MOPS before trading on one. Not financial advice.</footer>
+<script>
+(function () {
+  var q = document.getElementById('q');
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('.kinds input[data-kind]'));
+  var etf = document.getElementById('etf');
+  var days = Array.prototype.slice.call(document.querySelectorAll('.day'));
+  var count = document.getElementById('count');
+  var none = document.getElementById('none');
+  function apply() {
+    var on = {};
+    boxes.forEach(function (b) { on[b.dataset.kind] = b.checked; });
+    var terms = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0, perDay = {};
+    days.forEach(function (day) {
+      var date = day.id.slice(2), n = {}, any = false;
+      day.querySelectorAll('.ev').forEach(function (ev) {
+        var s = ev.dataset.s, ok = on[ev.dataset.kind] && (etf.checked || !('etf' in ev.dataset));
+        for (var i = 0; ok && i < terms.length; i++) ok = s.indexOf(terms[i]) >= 0;
+        ev.hidden = !ok;
+        if (ok) { any = true; shown++; n[ev.dataset.kind] = (n[ev.dataset.kind] || 0) + 1; }
+      });
+      day.hidden = !any;
+      perDay[date] = n;
+    });
+    document.querySelectorAll('.grid td[data-date]').forEach(function (td) {
+      var n = perDay[td.dataset.date] || {};
+      td.querySelectorAll('.c').forEach(function (c) {
+        var k = n[c.dataset.kind] || 0;
+        c.hidden = !k;
+        c.querySelector('.n').textContent = k;
+      });
+    });
+    if (count) count.textContent = shown;
+    if (none) none.hidden = shown > 0;
+  }
+  q.addEventListener('input', apply);
+  boxes.concat([etf]).forEach(function (b) { b.addEventListener('change', apply); });
+  apply();
+})();
+</script>
+</body>
+</html>

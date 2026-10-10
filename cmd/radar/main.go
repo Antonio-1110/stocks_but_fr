@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Antonio-1110/stocks_but_fr/internal/calendar"
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
@@ -29,11 +30,13 @@ var collectors = []step{
 	{"tw-prices", tw.Collect},       // fills the TW universe first
 	{"tw-revenue", revenue.Collect}, // needs the TW universe in companies
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
+	{"tw-calendar", calendar.Collect},
 }
 
 // renderers run in order on `radar render`.
 var renderers = []step{
 	{"site", site.Render},
+	{"calendar", calendar.Render}, // after site: reuses its static/style.css
 }
 
 func main() {
