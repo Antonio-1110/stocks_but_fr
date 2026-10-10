@@ -18,7 +18,7 @@ Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 ## Daily run
 
 `.github/workflows/daily.yml` runs `radar collect` and `radar render` every
-day at 19:00 Taipei time (and on demand from the Actions tab), then publishes
+3 hours (including 19:00 Taipei time, after the close) (and on demand from the Actions tab), then publishes
 `public/` to GitHub Pages. The database is kept between runs as the
 `radar.db.gz` asset on the `data` release; download it to backtest locally:
 

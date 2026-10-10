@@ -1,4 +1,4 @@
-# Daily run: collect Taiwan data into SQLite, render the dashboard, and
+# Scheduled run: collect Taiwan data into SQLite, render the dashboard, and
 # publish public/ to GitHub Pages.
 #
 # The database lives between runs as an asset on a release tagged `data`
@@ -13,7 +13,11 @@ name: daily
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # 19:00 Taipei, after the close and the 三大法人 report
+    # Every 3 hours. A run spends about an hour of FinMind's hourly limit per
+    # collector, so this keeps backfills moving around the clock; once data is
+    # current, runs have little to fetch. 11:00 UTC is 19:00 Taipei, after the
+    # close and the 三大法人 report.
+    - cron: "0 2-23/3 * * *"
   workflow_dispatch:
 
 # Runs never overlap: two runs would race on the database asset.
