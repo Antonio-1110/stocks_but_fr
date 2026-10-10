@@ -12,6 +12,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"html"
 	"log"
 	"strings"
 	"time"
@@ -128,7 +129,15 @@ func check(ctx context.Context, db *sql.DB, r rule, s sender, now time.Time) err
 	db.QueryRow(`SELECT seeded_on FROM alert_rules WHERE rule = ?`, r.name).Scan(&seeded)
 	switch {
 	case !seeded.Valid:
-		log.Printf("alerts: %s: first run, recording %d stocks without sending", r.name, len(on))
+		// Only a hello, so the owner sees the setup works without a flood.
+		log.Printf("alerts: %s: first run, recording %d stocks without alerting", r.name, len(on))
+		if s != nil {
+			msg := fmt.Sprintf("<b>%s</b> alerts are on. %d stocks pass now; you'll get a message when a new one enters the top %d.",
+				html.EscapeString(r.title), len(on), r.enter)
+			if err := s.Send(ctx, msg); err != nil {
+				return fmt.Errorf("send: %w", err)
+			}
+		}
 	case len(entered) == 0:
 		log.Printf("alerts: %s: no new stocks (%d on)", r.name, len(on))
 	default:

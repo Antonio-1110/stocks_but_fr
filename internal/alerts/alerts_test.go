@@ -80,8 +80,8 @@ func TestCheckSendsOnlyNewEntriesWithHysteresis(t *testing.T) {
 		return s.sent
 	}
 
-	// First run records without sending.
-	if sent := step("A", "B", "C"); len(sent) != 0 {
+	// First run records and only says hello.
+	if sent := step("A", "B", "C"); len(sent) != 1 || !strings.Contains(sent[0], "alerts are on") || strings.Contains(sent[0], "NA") {
 		t.Fatalf("first run sent %v", sent)
 	}
 	// A slips to 3rd (still within exit): no alert. D enters the top 2.
@@ -210,7 +210,7 @@ func TestRunEndToEnd(t *testing.T) {
 			momentum = append(momentum, m)
 		}
 	}
-	if len(momentum) != 1 || !strings.Contains(momentum[0], "2330 台積電") || strings.Contains(momentum[0], "1101") {
+	if len(momentum) != 2 || !strings.Contains(momentum[0], "alerts are on") || !strings.Contains(momentum[1], "2330 台積電") || strings.Contains(momentum[1], "1101") {
 		t.Fatalf("sent %q", s.sent)
 	}
 	if on, _ := loadOn(st.DB, "unpriced"); len(on) == 0 {
