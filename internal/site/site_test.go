@@ -88,10 +88,12 @@ var renderDay = day("2026-10-09")
 
 var testLowBase = config.Default().Revenue.LowBase
 
+var testUnpriced = config.Default().Site.Unpriced
+
 func TestLoadRows(t *testing.T) {
 	st := openStore(t)
 	seed(t, st)
-	rows, latest, err := loadRows(st, model.MarketTW, renderDay, testLowBase)
+	rows, latest, err := loadRows(st, model.MarketTW, renderDay, testLowBase, testUnpriced)
 	must(t, err)
 	if latest != "2026-08-30" {
 		t.Errorf("latest = %q", latest)
@@ -151,7 +153,7 @@ func TestRender(t *testing.T) {
 	must(t, err)
 
 	dir := t.TempDir()
-	must(t, render(st, dir, renderDay, testLowBase))
+	must(t, render(st, dir, renderDay, testLowBase, testUnpriced))
 	b, err := os.ReadFile(filepath.Join(dir, "index.html"))
 	must(t, err)
 	html := stdhtml.UnescapeString(string(b))
@@ -188,7 +190,7 @@ func TestRender(t *testing.T) {
 
 func TestRenderEmptyStore(t *testing.T) {
 	dir := t.TempDir()
-	must(t, render(openStore(t), dir, renderDay, testLowBase))
+	must(t, render(openStore(t), dir, renderDay, testLowBase, testUnpriced))
 	b, err := os.ReadFile(filepath.Join(dir, "index.html"))
 	must(t, err)
 	if !strings.Contains(string(b), "No companies in the store yet") {
@@ -241,7 +243,7 @@ func TestLowBase(t *testing.T) {
 	must(t, st.UpsertMonthlyRevenue(revSeries("2222", "2024-09-01", dip...)))
 	must(t, st.UpsertMonthlyRevenue(revSeries("3333", "2024-09-01", tiny...)))
 
-	rows, _, err := loadRows(st, tw, renderDay, testLowBase)
+	rows, _, err := loadRows(st, tw, renderDay, testLowBase, testUnpriced)
 	must(t, err)
 	got := map[string]Row{}
 	for _, r := range rows {
@@ -263,5 +265,54 @@ func TestLowBase(t *testing.T) {
 	}
 	if *dipRow.RevYoYAvg < 300 {
 		t.Errorf("flagged rows keep their YoY: avg = %v", *dipRow.RevYoYAvg)
+	}
+}
+
+func TestPercentiles(t *testing.T) {
+	got := percentiles([]float64{30, 10, 20, 20})
+	want := []float64{1, 0, 0.5, 0.5}
+	for i := range want {
+		if abs(got[i]-want[i]) > 1e-9 {
+			t.Fatalf("percentiles = %v, want %v", got, want)
+		}
+	}
+	if p := percentiles([]float64{5}); p[0] != 1 {
+		t.Errorf("single value = %v", p)
+	}
+}
+
+func TestRankUnpriced(t *testing.T) {
+	f, i := ptr[float64], ptr[int64]
+	row := func(tk string, yoy, avg, ch1m, fromHigh float64, net int64) Row {
+		return Row{Ticker: tk, LastClose: f(100), Turnover20: f(1e9), RevYoY: f(yoy), RevYoYAvg: f(avg),
+			Change1M: f(ch1m), FromHigh: f(fromHigh), TrustNet10: i(net)}
+	}
+	rows := []Row{
+		row("RAN", 60, 50, 40, 0, 5_000_000),             // fast growth, but the price already ran and funds piled in
+		row("LAG", 70, 50, -5, -30, 0),                   // same growth, speeding up, price flat and far off its high
+		row("MID", 40, 40, 5, -10, 1_000_000),            //
+		row("SLW", 15, 15, -20, -40, 0),                  // under min_growth_pct
+		{Ticker: "NOP", RevYoY: f(80), RevYoYAvg: f(80)}, // no price yet
+	}
+	lb := row("LBS", 900, 900, -10, -50, 0)
+	lb.LowBase = true
+	rows = append(rows, lb)
+
+	rankUnpriced(rows, testUnpriced)
+	ranks := map[string]int{}
+	for _, r := range rows {
+		ranks[r.Ticker] = r.UnpricedRank
+	}
+	// LAG and RAN grow alike; only LAG's price hasn't moved yet.
+	if ranks["LAG"] != 1 || ranks["RAN"] == 0 || ranks["MID"] == 0 {
+		t.Errorf("ranks = %v, want LAG first and RAN, MID ranked", ranks)
+	}
+	for _, tk := range []string{"SLW", "NOP", "LBS"} {
+		if ranks[tk] != 0 {
+			t.Errorf("%s should not be ranked, got %d", tk, ranks[tk])
+		}
+	}
+	if s := *rows[1].UnpricedScore; s <= 0 || s > 1 {
+		t.Errorf("score out of 0..1: %v", s)
 	}
 }

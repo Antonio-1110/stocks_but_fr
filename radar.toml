@@ -30,6 +30,16 @@ min_base_ntd = 10_000_000      # last year's same-month revenue below this many 
 min_base_ratio = 0.3           # ...as is one below this fraction of the company's average monthly revenue...
 typical_months = 12            # ...over this many months before that base month
 
+[site.unpriced]                # dashboard's "growth not yet priced in" ranking (issue #32)
+min_growth_pct = 20.0          # needs at least this 3-month average revenue YoY (%)...
+min_turnover_ntd = 10_000_000  # ...and this much average daily traded value, NTD
+# Score = sum of weight x percentile rank among the eligible stocks (0..1 each):
+growth_weight = 0.35           # higher 3-month revenue YoY
+accel_weight = 0.15            # latest month's YoY further above the 3-month average (speeding up)
+price_weight = 0.2             # smaller 1-month price change
+high_weight = 0.15             # further below the 52-week high
+flow_weight = 0.15             # less 10-day 投信+外資 net buying, as a share of traded value
+
 # Each strategy adds its own [strategy.<name>] section (see its issue).
 
 [strategy.cycle_bottom]        # issue #19: buy cyclicals as revenue YoY turns up

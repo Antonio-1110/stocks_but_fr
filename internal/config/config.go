@@ -13,6 +13,7 @@ type Config struct {
 	Costs    Costs    `toml:"costs"`
 	Backtest Backtest `toml:"backtest"`
 	Revenue  Revenue  `toml:"revenue"`
+	Site     Site     `toml:"site"`
 }
 
 type Run struct {
@@ -53,6 +54,22 @@ type LowBase struct {
 	TypicalMonths int     `toml:"typical_months"`
 }
 
+type Site struct {
+	Unpriced Unpriced `toml:"unpriced"`
+}
+
+// Unpriced weights the dashboard's "growth not yet priced in" ranking. Each
+// weight multiplies a 0..1 percentile rank among the eligible stocks.
+type Unpriced struct {
+	MinGrowthPct   float64 `toml:"min_growth_pct"`
+	MinTurnoverNTD float64 `toml:"min_turnover_ntd"`
+	GrowthWeight   float64 `toml:"growth_weight"`
+	AccelWeight    float64 `toml:"accel_weight"`
+	PriceWeight    float64 `toml:"price_weight"`
+	HighWeight     float64 `toml:"high_weight"`
+	FlowWeight     float64 `toml:"flow_weight"`
+}
+
 // Load reads the file at path. Keys missing from the file keep their defaults.
 func Load(path string) (Config, error) {
 	cfg := Default()
@@ -85,6 +102,15 @@ func Default() Config {
 			TestStart:      "2020-01-01",
 		},
 		Revenue: Revenue{LowBase: LowBase{MinBaseNTD: 10_000_000, MinBaseRatio: 0.3, TypicalMonths: 12}},
+		Site: Site{Unpriced: Unpriced{
+			MinGrowthPct:   20,
+			MinTurnoverNTD: 10_000_000,
+			GrowthWeight:   0.35,
+			AccelWeight:    0.15,
+			PriceWeight:    0.2,
+			HighWeight:     0.15,
+			FlowWeight:     0.15,
+		}},
 	}
 }
 

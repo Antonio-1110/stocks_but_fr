@@ -31,16 +31,17 @@ type Page struct {
 	Rows        []Row
 	Industries  []string
 	Backtest    []Field
+	Unpriced    config.Unpriced
 }
 
 // Render is the `radar render` step: it writes index.html and the static
 // assets into cfg.Run.PublicDir.
 func Render(_ context.Context, cfg config.Config, st *store.Store) error {
-	return render(st, cfg.Run.PublicDir, time.Now(), cfg.Revenue.LowBase)
+	return render(st, cfg.Run.PublicDir, time.Now(), cfg.Revenue.LowBase, cfg.Site.Unpriced)
 }
 
-func render(st *store.Store, dir string, now time.Time, lb config.LowBase) error {
-	rows, latest, err := loadRows(st, model.MarketTW, now, lb)
+func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u config.Unpriced) error {
+	rows, latest, err := loadRows(st, model.MarketTW, now, lb, u)
 	if err != nil {
 		return err
 	}
@@ -55,6 +56,7 @@ func render(st *store.Store, dir string, now time.Time, lb config.LowBase) error
 		Rows:        rows,
 		Industries:  industries(rows),
 		Backtest:    bt,
+		Unpriced:    u,
 	}
 
 	tmpl, err := template.New("").Funcs(funcs).ParseFS(web.FS, "templates/*.html")
@@ -115,7 +117,8 @@ func industries(rows []Row) []string {
 }
 
 var funcs = template.FuncMap{
-	"join": strings.Join,
+	"join":         strings.Join,
+	"unpricedNote": unpricedNote,
 	// pct formats a percentage with a sign; nil renders as a dash.
 	"pct": func(p *float64) string {
 		if p == nil {

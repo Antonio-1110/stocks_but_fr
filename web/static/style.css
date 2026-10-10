@@ -19,6 +19,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* rows and toggles set display themselves */
 html { background: var(--bg); }
 body {
   margin: 0; padding: 0 clamp(10px, 2vw, 28px) 32px; min-height: 100vh;
@@ -93,6 +94,20 @@ h2 {
 .backtest dt { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
 .backtest dd { margin: 0; word-break: break-word; }
 
+/* Ranking switch */
+.views { display: flex; gap: 0; margin-bottom: 8px; flex-wrap: wrap; }
+.views button {
+  font: 600 .72rem/1 var(--display); text-transform: uppercase; letter-spacing: .08em; cursor: pointer;
+  padding: 9px 14px; color: var(--muted); background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--panel-edge); border-radius: 0;
+}
+.views button + button { border-left: 0; }
+.views button:hover { color: var(--yellow); }
+.views button[aria-selected="true"] {
+  color: var(--bg); background: var(--magenta); border-color: var(--magenta);
+  box-shadow: 0 0 14px rgba(255, 42, 109, 0.55);
+}
+
 /* Filters */
 .filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .filters input, .filters select {
@@ -103,6 +118,7 @@ h2 {
 .filters input::placeholder { color: var(--muted); }
 .filters input:focus, .filters select:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 14px rgba(0, 240, 255, 0.35); }
 .hint { font-size: .78rem; margin: 6px 0 8px; }
+.empty { border: 1px dashed var(--panel-edge); padding: 10px 12px; color: var(--yellow); }
 
 /* Table: always the full panel width, no horizontal scroll. Headers wrap and
    long names/industries wrap so every column fits on a laptop screen. */

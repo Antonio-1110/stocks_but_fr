@@ -45,8 +45,11 @@ type Row struct {
 	LowBase       bool
 	RevYoYLowBase bool     // the latest month itself is off a tiny base
 	LowBaseNotes  []string // why, one line per flagged month
-	TrustNet10    *int64   // 投信 net, shares
-	ForeignNet10  *int64   // 外資 net, shares
+	// The "growth not yet priced in" ranking (unpriced.go); 0 / nil when not eligible.
+	UnpricedRank  int
+	UnpricedScore *float64
+	TrustNet10    *int64 // 投信 net, shares
+	ForeignNet10  *int64 // 外資 net, shares
 }
 
 type Links struct {
@@ -65,7 +68,7 @@ func linksFor(ticker string) Links {
 
 // loadRows builds the company list for one market from whatever is in the
 // store. asOf is the cut-off for revenue announcements (normally now).
-func loadRows(st *store.Store, market string, asOf time.Time, lb config.LowBase) (rows []Row, latest string, err error) {
+func loadRows(st *store.Store, market string, asOf time.Time, lb config.LowBase, u config.Unpriced) (rows []Row, latest string, err error) {
 	companies, err := st.Companies(market)
 	if err != nil {
 		return nil, "", fmt.Errorf("companies: %w", err)
@@ -101,6 +104,7 @@ func loadRows(st *store.Store, market string, asOf time.Time, lb config.LowBase)
 		rows = dropStale(st.DB, market, latest, rows)
 	}
 	rank(rows)
+	rankUnpriced(rows, u)
 	return rows, latest, nil
 }
 

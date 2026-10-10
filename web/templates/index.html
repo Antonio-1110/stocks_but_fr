@@ -33,6 +33,10 @@
 <section class="panel">
   <h2><span class="idx">02</span> Companies <span class="count" id="count">{{len .Rows}}</span></h2>
   {{if .Rows}}
+  <div class="views" role="tablist" aria-label="Ranking">
+    <button type="button" role="tab" data-view="growth" aria-selected="true">Fastest growth</button>
+    <button type="button" role="tab" data-view="unpriced" aria-selected="false">Not yet priced in</button>
+  </div>
   <div class="filters">
     <input id="q" type="search" placeholder="&gt; filter: ticker, name, industry" aria-label="Filter">
     <select id="industry" aria-label="Industry">
@@ -41,7 +45,9 @@
     </select>
     <label class="toggle" title="Revenue YoY measured against a tiny base last year"><input id="showlow" type="checkbox"> show low-base outliers</label>
   </div>
-  <p class="muted hint">Ranked by 3-month average revenue YoY. Stocks whose growth is off a tiny revenue base last year are marked <span class="lb">LOW BASE</span> and left out of the ranking. Tap a column header to sort.</p>
+  <p class="muted hint" data-for="unpriced" hidden>Strong or speeding-up revenue growth that the price hasn't caught up with yet: ranked on 3-month revenue YoY and its acceleration, a small 1-month price move, distance below the 52-week high, and little 投信/外資 buying so far. Only stocks with a price, at least {{.Unpriced.MinGrowthPct}}% growth and enough trading are ranked; low-base outliers are left out. Hover a rank for its score.</p>
+  <p class="muted hint" data-for="growth">Ranked by 3-month average revenue YoY. Stocks whose growth is off a tiny revenue base last year are marked <span class="lb">LOW BASE</span> and left out of the ranking. Tap a column header to sort.</p>
+  <p class="muted empty" id="unpriced-empty" hidden>No stock qualifies yet. This view needs daily prices, and the price backfill hasn't reached individual stocks so far; it fills in on its own as prices arrive.</p>
   <table id="list">
     <thead><tr>
       <th data-type="num" class="num">#</th>
@@ -58,7 +64,7 @@
     </tr></thead>
     <tbody>
     {{range .Rows}}{{$l := .Links}}
-    <tr data-industry="{{.Industry}}" data-search="{{.Ticker}} {{.Name}} {{.Industry}}"{{if .LowBase}} class="lowbase" data-lowbase{{end}}>
+    <tr data-industry="{{.Industry}}" data-search="{{.Ticker}} {{.Name}} {{.Industry}}"{{if .LowBase}} class="lowbase" data-lowbase{{end}}{{if .UnpricedRank}} data-unpriced-rank="{{.UnpricedRank}}" data-unpriced-note="{{unpricedNote .}}"{{end}}>
       {{if .LowBase}}<td class="num rank" data-sort="" title="Low base: {{join .LowBaseNotes "; "}}"><span class="lb">LB</span></td>{{else}}<td class="num rank" data-sort="{{.Rank}}">{{.Rank}}</td>{{end}}
       <td class="co" data-sort="{{.Ticker}}">
         <a class="name" href="{{$l.Goodinfo}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b> {{.Name}}</a>
