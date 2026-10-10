@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Antonio-1110/stocks_but_fr/internal/alerts"
 	"github.com/Antonio-1110/stocks_but_fr/internal/calendar"
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
@@ -31,6 +32,7 @@ var collectors = []step{
 	{"tw-revenue", revenue.Collect}, // needs the TW universe in companies
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
 	{"tw-calendar", calendar.Collect},
+	{"alerts", alerts.Run}, // last: Telegram on stocks newly passing a rule, from the fresh data
 }
 
 // renderers run in order on `radar render`.

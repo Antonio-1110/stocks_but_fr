@@ -14,6 +14,8 @@ type Config struct {
 	Backtest Backtest `toml:"backtest"`
 	Revenue  Revenue  `toml:"revenue"`
 	Site     Site     `toml:"site"`
+	Strategy Strategy `toml:"strategy"`
+	Alerts   Alerts   `toml:"alerts"`
 }
 
 type Run struct {
@@ -70,6 +72,35 @@ type Unpriced struct {
 	FlowWeight     float64 `toml:"flow_weight"`
 }
 
+// Strategy holds the strategy sections the Go side reads (the backtester reads
+// all of them itself). Alerts reuse revenue_momentum's entry filters.
+type Strategy struct {
+	RevenueMomentum RevenueMomentum `toml:"revenue_momentum"`
+}
+
+// RevenueMomentum is [strategy.revenue_momentum]; see backtest/strategies/revenue_momentum.py.
+type RevenueMomentum struct {
+	TopN               int     `toml:"top_n"`
+	ExitRank           int     `toml:"exit_rank"`
+	YoYMonths          int     `toml:"yoy_months"`
+	MinYoYPct          float64 `toml:"min_yoy_pct"`
+	HighDays           int     `toml:"high_days"`
+	MaxBelowHigh       float64 `toml:"max_below_high"`
+	HighWeight         float64 `toml:"high_weight"`
+	MinADVNTD          float64 `toml:"min_adv_ntd"`
+	ADVDays            int     `toml:"adv_days"`
+	RevenueDeadlineDay int     `toml:"revenue_deadline_day"`
+	TrustFilter        bool    `toml:"trust_filter"`
+	TrustDays          int     `toml:"trust_days"`
+}
+
+// Alerts is [alerts]: Telegram messages when a stock newly passes a rule (issue #34).
+type Alerts struct {
+	Rules        []string `toml:"rules"`
+	UnpricedTop  int      `toml:"unpriced_top"`
+	UnpricedExit int      `toml:"unpriced_exit"`
+}
+
 // Load reads the file at path. Keys missing from the file keep their defaults.
 func Load(path string) (Config, error) {
 	cfg := Default()
@@ -111,6 +142,20 @@ func Default() Config {
 			HighWeight:     0.15,
 			FlowWeight:     0.15,
 		}},
+		Strategy: Strategy{RevenueMomentum: RevenueMomentum{
+			TopN:               12,
+			ExitRank:           30,
+			YoYMonths:          3,
+			MinYoYPct:          10,
+			HighDays:           252,
+			MaxBelowHigh:       0.10,
+			HighWeight:         0.5,
+			MinADVNTD:          10_000_000,
+			ADVDays:            20,
+			RevenueDeadlineDay: 10,
+			TrustDays:          10,
+		}},
+		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
 	}
 }
 

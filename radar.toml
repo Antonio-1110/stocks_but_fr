@@ -40,6 +40,16 @@ price_weight = 0.2             # smaller 1-month price change
 high_weight = 0.15             # further below the 52-week high
 flow_weight = 0.15             # less 10-day 投信+外資 net buying, as a share of traded value
 
+[alerts]                       # issue #34: Telegram message when a stock newly passes a rule
+# Rules checked on every collect run. Switch to whichever one the backtests prove.
+#   revenue_momentum: [strategy.revenue_momentum]'s entry filters and score; a stock
+#                     alerts when it enters the top top_n, and can alert again only
+#                     after it has fallen out of the top exit_rank.
+#   unpriced:         the dashboard's "not yet priced in" ranking ([site.unpriced]).
+rules = ["revenue_momentum", "unpriced"]
+unpriced_top = 10              # alert when a stock enters the top N of that ranking...
+unpriced_exit = 25             # ...and again only after it has fallen below this rank
+
 # Each strategy adds its own [strategy.<name>] section (see its issue).
 
 [strategy.cycle_bottom]        # issue #19: buy cyclicals as revenue YoY turns up

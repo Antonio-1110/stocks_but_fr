@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -11,7 +12,7 @@ func TestLoadRepoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg != Default() {
+	if !reflect.DeepEqual(cfg, Default()) {
 		t.Errorf("radar.toml and Default() disagree:\nfile:    %+v\ndefault: %+v", cfg, Default())
 	}
 }

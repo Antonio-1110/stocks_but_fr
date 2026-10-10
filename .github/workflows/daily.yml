@@ -76,6 +76,9 @@ jobs:
       - name: Collect
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          # The last collect step sends Telegram alerts (internal/alerts).
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: ./radar collect
 
       # Upload under a temporary name, then swap, so a failed upload never

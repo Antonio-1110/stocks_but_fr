@@ -39,5 +39,8 @@ Every new one gets listed here.
 
 - `FINMIND_TOKEN`: FinMind API token (Actions secret). Optional; without it
   FinMind allows fewer requests per hour, so backfills take more runs.
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`: where alerts go (Actions secrets,
+  or `.env` on the Pi). Optional; without them alerts are only logged. Rules
+  are set in `radar.toml` under `[alerts]`.
 
 Not financial advice.
