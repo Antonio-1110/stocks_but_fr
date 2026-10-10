@@ -46,7 +46,11 @@ const eventCheckDays = 7
 // are rebuilt where events or backfilled days changed them.
 func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
 	// Revenue and flows run after this step and share the FinMind budget.
-	return collect(ctx, cfg, st, ForStep("tw-prices", 2), NewTPEx(), time.Now().In(taipei))
+	// Prices take half of it (later = 1, though two steps follow): TWSE
+	// prices are the longest backfill, about 3 requests per stock against
+	// 1 for revenue and flows, so an even three-way split left prices
+	// finishing last by about a day.
+	return collect(ctx, cfg, st, ForStep("tw-prices", 1), NewTPEx(), time.Now().In(taipei))
 }
 
 func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, tp *TPEx, now time.Time) error {
