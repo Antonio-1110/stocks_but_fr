@@ -249,7 +249,7 @@ func TestOldTickerRefetchesEvents(t *testing.T) {
 	cfg := config.Default()
 	cfg.Run.HistoryStart = "2024-01-01"
 	st := openStore(t)
-	for _, q := range []string{checksTable, eventsTable, eventsFullTable} {
+	for _, q := range []string{checksTable, eventsTable, eventsFullTable, eventChecksTable} {
 		st.DB.Exec(q)
 	}
 	st.UpsertPrices([]model.Price{{Market: model.MarketTW, Ticker: "2330", Date: parseDay("2024-06-12"), Close: 909, AdjClose: 905.5}})
@@ -262,9 +262,16 @@ func TestOldTickerRefetchesEvents(t *testing.T) {
 	if strings.Join(*calls, " ") != strings.Join(want, " ") {
 		t.Errorf("calls = %v, want %v", *calls, want)
 	}
+	// Within a week only prices are fetched; after a week, events again
+	// from the last check.
 	*calls = nil
-	updateTicker(context.Background(), cfg, st, fm, newDirty(), "2330", time.Date(2024, 6, 15, 18, 0, 0, 0, taipei))
-	if (*calls)[1] != "TaiwanStockDividendResult_2330@2024-06-14" {
-		t.Errorf("second update fetched events from %v", (*calls)[1])
+	updateTicker(context.Background(), cfg, st, fm, newDirty(), "2330", time.Date(2024, 6, 17, 18, 0, 0, 0, taipei))
+	if len(*calls) != 1 || !strings.HasPrefix((*calls)[0], "TaiwanStockPrice_2330@") {
+		t.Errorf("update within a week: calls = %v", *calls)
+	}
+	*calls = nil
+	updateTicker(context.Background(), cfg, st, fm, newDirty(), "2330", time.Date(2024, 6, 21, 18, 0, 0, 0, taipei))
+	if len(*calls) != 3 || (*calls)[1] != "TaiwanStockDividendResult_2330@2024-06-14" {
+		t.Errorf("update after a week: calls = %v", *calls)
 	}
 }

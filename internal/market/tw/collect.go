@@ -2,6 +2,7 @@ package tw
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -29,6 +30,15 @@ const checksTable = `CREATE TABLE IF NOT EXISTS tw_price_checks (
 // history_start.
 const eventsFullTable = `CREATE TABLE IF NOT EXISTS tw_events_full (ticker TEXT PRIMARY KEY)`
 
+// eventChecksTable records when each ticker's FinMind events were last
+// fetched; they are fetched again after eventCheckDays.
+const eventChecksTable = `CREATE TABLE IF NOT EXISTS tw_event_checks (
+	ticker     TEXT PRIMARY KEY,
+	checked_on TEXT NOT NULL
+)`
+
+const eventCheckDays = 7
+
 // Collect is the `radar collect` step. OTC (TPEx) stocks come from TPEx's
 // whole-market daily files, one request per day for every stock. TWSE blocks
 // cloud addresses after a request or two, so TWSE-listed stocks still come
@@ -40,7 +50,7 @@ func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
 }
 
 func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind, tp *TPEx, now time.Time) error {
-	for _, q := range []string{checksTable, eventsTable, eventsFullTable, daysTable, eventYearsTable} {
+	for _, q := range []string{checksTable, eventsTable, eventsFullTable, eventChecksTable, daysTable, eventYearsTable} {
 		if _, err := st.DB.Exec(q); err != nil {
 			return err
 		}
@@ -222,26 +232,43 @@ func updateTicker(ctx context.Context, cfg config.Config, st *store.Store, c *Fi
 	}
 	// Events are stored since this collector rebuilds adjusted closes from
 	// them. A ticker priced before that has none stored, so its events are
-	// fetched from history_start once (same number of requests).
+	// fetched from history_start once. After that they are checked at most
+	// every eventCheckDays, from the last check, so daily upkeep is one
+	// request; a new ex-date can take that long to reach adj_close.
 	var full int
 	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM tw_events_full WHERE ticker = ?`, ticker).Scan(&full); err != nil {
 		return err
 	}
-	evParams := params
-	if full == 0 {
-		evParams = map[string]string{"data_id": ticker, "start_date": cfg.Run.HistoryStart}
-	}
-	divs, err := Fetch[dividendRow](ctx, c, "TaiwanStockDividendResult", evParams)
-	if err != nil {
-		return err
-	}
-	reds, err := Fetch[reductionRow](ctx, c, "TaiwanStockCapitalReductionReferencePrice", evParams)
-	if err != nil {
+	var lastCheck string
+	err = st.DB.QueryRow(`SELECT checked_on FROM tw_event_checks WHERE ticker = ?`, ticker).Scan(&lastCheck)
+	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	if err := writeEvents(st, dirty, finmindEvents(ticker, divs, reds), today); err != nil {
-		return err
+	evFrom := from
+	switch {
+	case full == 0:
+		evFrom = cfg.Run.HistoryStart
+	case lastCheck != "":
+		evFrom = lastCheck
+	}
+	if full == 0 || lastCheck == "" || !parseDay(lastCheck).AddDate(0, 0, eventCheckDays).After(today) {
+		evParams := map[string]string{"data_id": ticker, "start_date": evFrom}
+		divs, err := Fetch[dividendRow](ctx, c, "TaiwanStockDividendResult", evParams)
+		if err != nil {
+			return err
+		}
+		reds, err := Fetch[reductionRow](ctx, c, "TaiwanStockCapitalReductionReferencePrice", evParams)
+		if err != nil {
+			return err
+		}
+		if err := writeEvents(st, dirty, finmindEvents(ticker, divs, reds), today); err != nil {
+			return err
+		}
+		if _, err := st.DB.Exec(`INSERT OR REPLACE INTO tw_event_checks (ticker, checked_on) VALUES (?, ?)`,
+			ticker, today.Format("2006-01-02")); err != nil {
+			return err
+		}
 	}
 	prices := mergePrices(ticker, raw, nil)
 	if err := writeRaw(st, dirty, prices); err != nil {
