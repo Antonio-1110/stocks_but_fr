@@ -246,3 +246,9 @@ func toAny(s []string) []any {
 	}
 	return out
 }
+
+// RevenueMomentum is the same ranking for other packages: the paper portfolio
+// (issue #35) trades exactly what the alerts announce.
+func RevenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit, string, error) {
+	return revenueMomentum(db, now, p)
+}

@@ -16,6 +16,7 @@ type Config struct {
 	Site     Site     `toml:"site"`
 	Strategy Strategy `toml:"strategy"`
 	Alerts   Alerts   `toml:"alerts"`
+	Paper    Paper    `toml:"paper"`
 }
 
 type Run struct {
@@ -76,6 +77,7 @@ type Unpriced struct {
 // all of them itself). Alerts reuse revenue_momentum's entry filters.
 type Strategy struct {
 	RevenueMomentum RevenueMomentum `toml:"revenue_momentum"`
+	CycleBottom     CycleBottom     `toml:"cycle_bottom"`
 }
 
 // RevenueMomentum is [strategy.revenue_momentum]; see backtest/strategies/revenue_momentum.py.
@@ -92,6 +94,33 @@ type RevenueMomentum struct {
 	RevenueDeadlineDay int     `toml:"revenue_deadline_day"`
 	TrustFilter        bool    `toml:"trust_filter"`
 	TrustDays          int     `toml:"trust_days"`
+	StopLoss           float64 `toml:"stop_loss"`
+	StopMADays         int     `toml:"stop_ma_days"`
+}
+
+// CycleBottom is [strategy.cycle_bottom]; see backtest/strategies/cycle_bottom.py.
+type CycleBottom struct {
+	Industries        []string `toml:"industries"`
+	Tickers           []string `toml:"tickers"`
+	YoYWindow         int      `toml:"yoy_window"`
+	TroughMonths      int      `toml:"trough_months"`
+	MinNegativeMonths int      `toml:"min_negative_months"`
+	ImproveMonths     int      `toml:"improve_months"`
+	MaxEntryYoY       float64  `toml:"max_entry_yoy"`
+	RolloverMonths    int      `toml:"rollover_months"`
+	StopLoss          float64  `toml:"stop_loss"`
+	PriceMADays       int      `toml:"price_ma_days"`
+	MaxPositions      int      `toml:"max_positions"`
+	MinAvgTurnover    float64  `toml:"min_avg_turnover"`
+	TurnoverDays      int      `toml:"turnover_days"`
+}
+
+// Paper is [paper]: portfolios that follow a strategy forward on live data (issue #35).
+type Paper struct {
+	Strategies     []string `toml:"strategies"`
+	InitialCapital float64  `toml:"initial_capital"`
+	Benchmark      string   `toml:"benchmark"`
+	MinCoverage    float64  `toml:"min_coverage"`
 }
 
 // Alerts is [alerts]: Telegram messages when a stock newly passes a rule (issue #34).
@@ -142,20 +171,44 @@ func Default() Config {
 			HighWeight:     0.15,
 			FlowWeight:     0.15,
 		}},
-		Strategy: Strategy{RevenueMomentum: RevenueMomentum{
-			TopN:               12,
-			ExitRank:           30,
-			YoYMonths:          3,
-			MinYoYPct:          10,
-			HighDays:           252,
-			MaxBelowHigh:       0.10,
-			HighWeight:         0.5,
-			MinADVNTD:          10_000_000,
-			ADVDays:            20,
-			RevenueDeadlineDay: 10,
-			TrustDays:          10,
-		}},
+		Strategy: Strategy{
+			RevenueMomentum: RevenueMomentum{
+				TopN:               12,
+				ExitRank:           30,
+				YoYMonths:          3,
+				MinYoYPct:          10,
+				HighDays:           252,
+				MaxBelowHigh:       0.10,
+				HighWeight:         0.5,
+				MinADVNTD:          10_000_000,
+				ADVDays:            20,
+				RevenueDeadlineDay: 10,
+				TrustDays:          10,
+				StopLoss:           0.15,
+			},
+			CycleBottom: CycleBottom{
+				Industries:        []string{"半導體業", "光電業", "航運業", "鋼鐵工業", "塑膠工業"},
+				Tickers:           []string{},
+				YoYWindow:         3,
+				TroughMonths:      12,
+				MinNegativeMonths: 6,
+				ImproveMonths:     2,
+				MaxEntryYoY:       10,
+				RolloverMonths:    2,
+				StopLoss:          0.25,
+				PriceMADays:       60,
+				MaxPositions:      10,
+				MinAvgTurnover:    20_000_000,
+				TurnoverDays:      20,
+			},
+		},
 		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
+		Paper: Paper{
+			Strategies:     []string{"revenue_momentum", "cycle_bottom"},
+			InitialCapital: 5_000_000,
+			Benchmark:      "0050",
+			MinCoverage:    0.9,
+		},
 	}
 }
 

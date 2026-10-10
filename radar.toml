@@ -50,6 +50,16 @@ rules = ["revenue_momentum", "unpriced"]
 unpriced_top = 10              # alert when a stock enters the top N of that ranking...
 unpriced_exit = 25             # ...and again only after it has fallen below this rank
 
+[paper]                        # issue #35: follow strategies forward on live data, after costs
+# One paper portfolio per strategy. Each starts on its first run with initial_capital
+# in cash, trades on the close of the latest fully collected trading day, fills at
+# the next trading day's open with [costs.tw] fees and tax, and is compared with
+# the same money put into the benchmark on its first fill day.
+strategies = ["revenue_momentum", "cycle_bottom"]
+initial_capital = 5_000_000    # NTD, each portfolio
+benchmark = "0050"
+min_coverage = 0.9             # a day's prices count as collected once it has this share of the previous day's stocks
+
 # Each strategy adds its own [strategy.<name>] section (see its issue).
 
 [strategy.cycle_bottom]        # issue #19: buy cyclicals as revenue YoY turns up

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* Paper-portfolio-only rules; theme tokens come from static/style.css. */
+.nav { margin: 0 0 8px; font-size: .85rem; }
+.rules { margin: 0 0 10px; font-size: .85rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.tile { border: 1px solid var(--panel-edge); padding: 8px 10px; }
+.tile dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.tile dd { margin: 2px 0 0; font-size: 1.15rem; }
+.tile dd small { display: block; font-size: .72rem; color: var(--muted); }
+.chart { position: relative; margin: 0 0 14px; }
+.chart { max-width: 900px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid line { stroke: var(--line); stroke-width: 1; }
+.chart .grid line.zero { stroke: var(--muted); stroke-dasharray: 3 3; }
+.chart text { fill: var(--muted); font: 11px var(--mono); }
+.chart .s-p { stroke: var(--cyan); }
+.chart .s-b { stroke: var(--violet); }
+.chart path { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart text.l-p { fill: var(--fg); }
+.chart text.l-b { fill: var(--fg); }
+.chart .cross { stroke: var(--muted); stroke-width: 1; }
+.chart .tip {
+  position: absolute; top: 0; pointer-events: none; padding: 4px 8px; font-size: .75rem;
+  background: #120e24; border: 1px solid var(--panel-edge); color: var(--fg); white-space: nowrap;
+}
+.legend { display: flex; gap: 14px; font-size: .78rem; color: var(--fg); margin: 0 0 4px; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; }
+.legend .k-p i { background: var(--cyan); }
+.legend .k-b i { background: var(--violet); }
+.book h3 { margin: 12px 0 6px; font: 600 .85rem/1.2 var(--display); letter-spacing: .1em; color: var(--cyan); }
+.book td.co a b { color: var(--cyan); margin-right: 4px; }
+.book td.co { font-family: var(--cjk), var(--mono); }
+.book td.why { color: var(--muted); font-family: var(--cjk), var(--mono); font-size: .82rem; overflow-wrap: anywhere; }
+.book .side-buy { color: var(--cyan); }
+.book .side-sell { color: var(--yellow); }
+.book tr.pending td { background: rgba(249, 240, 2, 0.05); }
+.book .st { font-size: .75rem; color: var(--muted); }
+.book thead th { cursor: default; }
+@media (max-width: 720px) {
+  .chart text { font-size: 19px; }
+  .book thead { display: none; }
+  .book tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .book td.co, .book td.why { grid-column: 1 / -1; }
+  .book td[data-label]::before {
+    content: attr(data-label); display: block; color: var(--muted); font-size: .62rem;
+    text-transform: uppercase; letter-spacing: .04em; text-shadow: none;
+  }
+  .book td.co::before, .book td.why::before { content: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<header>
+  <p class="sys">SYS://TW-RADAR/PAPER <span class="blink">_</span></p>
+  <h1 data-text="{{.Title}}">{{.Title}}</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{if .PriceDate}} <span class="sep">//</span> <b>prices as of {{.PriceDate}}</b>{{end}}</p>
+  <p class="nav"><a href="index.html">&lt; back to companies</a></p>
+</header>
+
+<main>
+<section class="panel">
+  <h2><span class="idx">00</span> How this works</h2>
+  <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held.</p>
+</section>
+
+{{range $i, $p := .Portfolios}}
+<section class="panel book" id="{{.Name}}">
+  <h2><span class="idx">0{{inc $i}}</span> {{.Title}}</h2>
+  <p class="muted rules">{{.Rules}} Started on the {{.StartedOn}} close with NT${{ntd .Capital}}.</p>
+  <dl class="tiles">
+    <div class="tile"><dt>Value after costs</dt><dd>NT${{ntd .Value}}<small class="{{sign .Return}}">{{pct .Return}}</small></dd></div>
+    <div class="tile"><dt>{{$.Benchmark}} same money</dt><dd>{{if .HasBench}}NT${{ntd .Bench}}<small class="{{sign .BenchReturn}}">{{pct .BenchReturn}}</small>{{else}}<span class="muted">buys at next open</span>{{end}}</dd></div>
+    <div class="tile"><dt>Ahead of {{$.Benchmark}}</dt><dd>{{if .HasBench}}<span class="{{sign (diff .Value .Bench)}}">{{money (diff .Value .Bench)}}</span>{{else}}<span class="muted">–</span>{{end}}</dd></div>
+    <div class="tile"><dt>Cash</dt><dd>NT${{ntd .Cash}}</dd></div>
+    <div class="tile"><dt>Commission paid</dt><dd>NT${{ntd .Fees}}</dd></div>
+    <div class="tile"><dt>Sell tax paid</dt><dd>NT${{ntd .Tax}}</dd></div>
+  </dl>
+
+  {{with .Chart}}{{if .Points}}
+  <div class="legend"><span class="k-p"><i></i>Portfolio</span><span class="k-b"><i></i>{{$.Benchmark}}</span></div>
+  <div class="chart">
+    <svg viewBox="0 0 {{chartW}} {{chartH}}" role="img" aria-label="Return since start, portfolio against {{$.Benchmark}}" data-pts="{{.Data}}" data-pad-l="{{padL}}" data-pad-r="{{padR}}">
+      <g class="grid">
+        {{range .Ticks}}<line x1="{{padL}}" x2="{{sub chartW padR}}" y1="{{f1 .Y}}" y2="{{f1 .Y}}"/><text x="{{sub padL 6}}" y="{{f1 .Y}}" dy="4" text-anchor="end">{{.Label}}</text>{{end}}
+        <line class="zero" x1="{{padL}}" x2="{{sub chartW padR}}" y1="{{f1 .ZeroY}}" y2="{{f1 .ZeroY}}"/>
+      </g>
+      <text x="{{padL}}" y="{{sub chartH 4}}">{{.First}}</text>
+      <text x="{{sub chartW padR}}" y="{{sub chartH 4}}" text-anchor="end">{{.Last}}</text>
+      {{if .BenchPath}}<path class="s-b" d="{{.BenchPath}}"/>{{end}}
+      <path class="s-p" d="{{.Path}}"/>
+      {{if eq .Points 1}}<circle cx="{{sub chartW padR}}" cy="{{f1 .EndY}}" r="4" fill="var(--cyan)"/>{{end}}
+      <text class="l-p" x="{{sub chartW (sub padR 6)}}" y="{{f1 .EndY}}" dy="4">{{.EndLabel}}</text>
+      {{if .BenchPath}}<text class="l-b" x="{{sub chartW (sub padR 6)}}" y="{{f1 .BenchEndY}}" dy="4">{{.BenchEndLabel}}</text>{{end}}
+      <line class="cross" y1="0" y2="{{sub chartH padB}}" visibility="hidden"/>
+    </svg>
+    <div class="tip" hidden></div>
+  </div>
+  {{end}}{{end}}
+
+  <h3>Holdings <span class="count">{{len .Holdings}}</span></h3>
+  {{if .Holdings}}
+  <table>
+    <thead><tr><th>Stock</th><th>Since</th><th>Cost</th><th>Value</th><th>Return after costs</th><th>Weight</th></tr></thead>
+    <tbody>
+    {{range .Holdings}}<tr>
+      <td class="co"><a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a></td>
+      <td class="num" data-label="Since">{{.Opened}}</td>
+      <td class="num" data-label="Cost">{{ntd .Cost}}</td>
+      <td class="num" data-label="Value">{{ntd .Value}}</td>
+      <td class="num {{sign .Return}}" data-label="Return">{{pct .Return}}</td>
+      <td class="num" data-label="Weight">{{pct0 .Weight}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="muted">All cash.</p>{{end}}
+
+  <h3>Orders <span class="count">{{len .Orders}}</span></h3>
+  {{if .Orders}}
+  <table>
+    <thead><tr><th>Stock</th><th>Side</th><th>Signal</th><th>Filled</th><th>Price</th><th>NTD</th><th>Fee+tax</th><th>P/L</th><th>Why</th></tr></thead>
+    <tbody>
+    {{range .Orders}}<tr class="{{.Status}}">
+      <td class="co"><a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a></td>
+      <td class="num side-{{.Side}}" data-label="Side">{{.Side}}</td>
+      <td class="num" data-label="Signal">{{.SignalDate}}</td>
+      <td class="num" data-label="Filled">{{if eq .Status "filled"}}{{.FillDate}}{{else}}<span class="st">{{.Status}}</span>{{end}}</td>
+      <td class="num" data-label="Price">{{if .Price}}{{price .Price}}{{else}}–{{end}}</td>
+      <td class="num" data-label="NTD">{{if .Value}}{{ntd .Value}}{{else}}–{{end}}</td>
+      <td class="num" data-label="Fee+tax">{{if .Costs}}{{ntd .Costs}}{{else}}–{{end}}</td>
+      <td class="num {{if .HasPnL}}{{sign .PnL}}{{end}}" data-label="P/L">{{if .HasPnL}}{{ntd .PnL}}{{else}}–{{end}}</td>
+      <td class="why">{{.Reason}}{{if .Note}} · {{.Note}}{{end}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="muted">No orders yet.</p>{{end}}
+</section>
+{{else}}
+<section class="panel">
+  <p class="muted">No paper portfolio has started yet. They start on the first <code>radar collect</code> run with prices.</p>
+</section>
+{{end}}
+</main>
+<script>
+// Hover readout on each equity chart: nearest day, both returns.
+document.querySelectorAll('.chart svg').forEach(function (svg) {
+  var pts = JSON.parse(svg.dataset.pts || '[]');
+  if (pts.length < 2) return;
+  var box = svg.parentNode, tip = box.querySelector('.tip'), cross = svg.querySelector('.cross');
+  var vb = svg.viewBox.baseVal, l = +svg.dataset.padL, r = vb.width - svg.dataset.padR;
+  var fmt = function (x) { return (x >= 0 ? '+' : '') + (x * 100).toFixed(2) + '%'; };
+  function show(ev) {
+    var rect = svg.getBoundingClientRect();
+    var x = (ev.clientX - rect.left) / rect.width * vb.width;
+    var i = Math.round((x - l) / (r - l) * (pts.length - 1));
+    i = Math.max(0, Math.min(pts.length - 1, i));
+    var px = l + i / (pts.length - 1) * (r - l), p = pts[i];
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+    tip.textContent = p.d + '  Portfolio ' + fmt(p.p) + (p.b != null ? '  {{$.Benchmark}} ' + fmt(p.b) : '');
+    tip.hidden = false;
+    var left = px / vb.width * rect.width + 10;
+    tip.style.left = Math.min(left, rect.width - tip.offsetWidth) + 'px';
+  }
+  svg.addEventListener('pointermove', show);
+  svg.addEventListener('pointerleave', function () { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
+});
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
+	"github.com/Antonio-1110/stocks_but_fr/internal/paper"
 	"github.com/Antonio-1110/stocks_but_fr/internal/site"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
@@ -33,12 +34,14 @@ var collectors = []step{
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
 	{"tw-calendar", calendar.Collect},
 	{"alerts", alerts.Run}, // last: Telegram on stocks newly passing a rule, from the fresh data
+	{"paper", paper.Run},   // paper portfolios trade on the same fresh data
 }
 
 // renderers run in order on `radar render`.
 var renderers = []step{
 	{"site", site.Render},
 	{"calendar", calendar.Render}, // after site: reuses its static/style.css
+	{"paper", paper.Render},       // after site: reuses its static/style.css
 }
 
 func main() {

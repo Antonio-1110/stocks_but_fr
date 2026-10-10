@@ -33,6 +33,14 @@ and ex-rights days, shareholder meetings and the revenue/financial report
 deadlines. It reads MOPS and the TWSE/TPEx open data directly (no FinMind
 requests), each source at most every 6 hours.
 
+## Paper portfolios
+
+`public/paper.html` runs each strategy in `radar.toml` `[paper]` forward on
+live data with NT$5M of pretend money: it decides on a trading day's close,
+fills at the next open with the `[costs.tw]` commission and sell tax, and is
+compared with the same money held in 0050. State is in the `paper_*` tables,
+so picks once made never change. No real orders are placed.
+
 ## Environment variables
 
 Every new one gets listed here.
