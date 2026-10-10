@@ -26,3 +26,18 @@ adv_days = 20                  # ...its average daily traded value over this man
 min_trade_value = 10_000       # NTD; smaller rebalancing trades are skipped (full exits always happen)
 
 # Each strategy adds its own [strategy.<name>] section (see its issue).
+
+[strategy.cycle_bottom]        # issue #19: buy cyclicals as revenue YoY turns up
+industries = ["半導體業", "光電業", "航運業", "鋼鐵工業", "塑膠工業"]  # FinMind industry_category
+tickers = []                   # extra tickers to include whatever their industry
+yoy_window = 3                 # YoY on a trailing 3-month revenue sum (smooths Lunar New Year)
+trough_months = 12             # look back this many months before the turn...
+min_negative_months = 6        # ...and need at least this many with negative YoY
+improve_months = 2             # YoY rose this many months in a row
+max_entry_yoy = 10.0           # percent; don't buy once YoY is already above this
+rollover_months = 2            # sell when YoY falls this many months in a row
+stop_loss = 0.25               # sell if the adjusted close drops this far below the entry close
+price_ma_days = 60             # buy only above this moving average (0 = off)
+max_positions = 10             # each buy gets 1/max_positions of equity
+min_avg_turnover = 20_000_000  # NTD a day...
+turnover_days = 20             # ...averaged over this many trading days
