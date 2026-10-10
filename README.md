@@ -20,7 +20,9 @@ Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 `.github/workflows/daily.yml` runs `radar collect` and `radar render` every
 hour (so evening runs pick up the day's close) (and on demand from the Actions tab), then publishes
 `public/` to GitHub Pages. The database is kept between runs as the
-`radar.db.gz` asset on the `data` release; download it to backtest locally:
+`radar.db.gz` asset on the `data` release. `.github/workflows/publish.yml`
+re-renders from that database and republishes on every push to `main`, so
+site changes go live in minutes. Download the database to backtest locally:
 
     gh release download data --pattern radar.db.gz --dir data && gunzip data/radar.db.gz
 

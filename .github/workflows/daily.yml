@@ -20,11 +20,6 @@ on:
     - cron: "17 * * * *"
   workflow_dispatch:
 
-# Runs never overlap: two runs would race on the database asset.
-concurrency:
-  group: daily
-  cancel-in-progress: false
-
 env:
   DATA_TAG: data
   DB_ASSET: radar.db.gz
@@ -33,6 +28,10 @@ env:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # Runs never overlap: two runs would race on the database asset.
+    concurrency:
+      group: daily
+      cancel-in-progress: false
     # Each collector paces FinMind for up to about an hour per run.
     timeout-minutes: 300
     permissions:
@@ -115,6 +114,10 @@ jobs:
   deploy:
     needs: run
     runs-on: ubuntu-latest
+    # Shared with publish.yml so two Pages deploys never collide.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

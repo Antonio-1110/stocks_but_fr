@@ -1,0 +1,80 @@
+# Publish on push: render the dashboard from the latest saved database and
+# deploy it to Pages, without collecting. Site changes go live in a couple of
+# minutes instead of waiting for the hourly run (daily.yml) to collect first.
+
+name: publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DATA_TAG: data
+  DB_ASSET: radar.db.gz
+  TZ: Asia/Taipei
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -o radar ./cmd/radar
+
+      # Same lookup as daily.yml. With no saved database yet the site renders
+      # empty, which is still worth publishing.
+      - name: Download database
+        run: |
+          mkdir -p data
+          if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
+            if grep -q "release not found" <<<"$assets"; then
+              echo "No '$DATA_TAG' release yet; rendering an empty site"
+              exit 0
+            fi
+            echo "$assets"
+            exit 1
+          fi
+          for name in "$DB_ASSET" "$DB_ASSET.new"; do
+            if grep -qxF "$name" <<<"$assets"; then
+              gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz
+              gunzip data/radar.db.gz
+              ls -lh data/radar.db
+              exit 0
+            fi
+          done
+          echo "Release '$DATA_TAG' has no database asset; rendering an empty site"
+
+      - name: Render
+        run: ./radar render
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: render
+    runs-on: ubuntu-latest
+    # Shared with daily.yml so two Pages deploys never collide.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
