@@ -41,3 +41,19 @@ price_ma_days = 60             # buy only above this moving average (0 = off)
 max_positions = 10             # each buy gets 1/max_positions of equity
 min_avg_turnover = 20_000_000  # NTD a day...
 turnover_days = 20             # ...averaged over this many trading days
+
+[strategy.revenue_momentum]    # issue #18; see backtest/strategies/revenue_momentum.py
+top_n = 12                     # names held, equal weight
+exit_rank = 30                 # a holding is kept while it ranks this high or better
+yoy_months = 3                 # revenue YoY must be strong in each of the last N months...
+min_yoy_pct = 10.0             # ...by at least this much (%)
+high_days = 252                # 52-week high window, trading days
+max_below_high = 0.10          # close must be within 10% of that high
+high_weight = 0.5              # score = (1-w) x YoY rank + w x closeness-to-high rank
+min_adv_ntd = 10_000_000       # NTD average traded value...
+adv_days = 20                  # ...over this many days
+revenue_deadline_day = 10      # revenue is due by the 10th; rebalance the trading day after
+trust_filter = false           # require 投信 net buying (the script runs both variants)
+trust_days = 10                # 投信 net buy summed over this many trading days
+stop_loss = 0.15               # sell between rebalances when 15% below the buy-day close
+stop_ma_days = 0               # >0 also sells on a close below this moving average
