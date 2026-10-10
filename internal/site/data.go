@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
@@ -26,21 +27,26 @@ const dateLayout = "2006-01-02"
 // Row is one company on the dashboard. Pointer fields are nil when the store
 // has no data for them yet.
 type Row struct {
-	Rank         int
-	Ticker       string
-	Name         string
-	Industry     string
-	Exchange     string
-	LastDate     string
-	LastClose    *float64
-	Change1M     *float64 // percent, from adjusted closes
-	FromHigh     *float64 // percent below the 52-week adjusted high (<= 0)
-	Turnover20   *float64 // average daily traded value, NTD
-	RevYoY       *float64 // latest announced month, percent
-	RevYoYAvg    *float64 // average of the last revenueMonths announced months
-	RevMonth     string   // "2026-08"
-	TrustNet10   *int64   // 投信 net, shares
-	ForeignNet10 *int64   // 外資 net, shares
+	Rank       int
+	Ticker     string
+	Name       string
+	Industry   string
+	Exchange   string
+	LastDate   string
+	LastClose  *float64
+	Change1M   *float64 // percent, from adjusted closes
+	FromHigh   *float64 // percent below the 52-week adjusted high (<= 0)
+	Turnover20 *float64 // average daily traded value, NTD
+	RevYoY     *float64 // latest announced month, percent
+	RevYoYAvg  *float64 // average of the last revenueMonths announced months
+	RevMonth   string   // "2026-08"
+	// LowBase is set when any month in the YoY window is off a tiny base
+	// (config.LowBase); such rows are shown but left out of the ranking.
+	LowBase       bool
+	RevYoYLowBase bool     // the latest month itself is off a tiny base
+	LowBaseNotes  []string // why, one line per flagged month
+	TrustNet10    *int64   // 投信 net, shares
+	ForeignNet10  *int64   // 外資 net, shares
 }
 
 type Links struct {
@@ -59,7 +65,7 @@ func linksFor(ticker string) Links {
 
 // loadRows builds the company list for one market from whatever is in the
 // store. asOf is the cut-off for revenue announcements (normally now).
-func loadRows(st *store.Store, market string, asOf time.Time) (rows []Row, latest string, err error) {
+func loadRows(st *store.Store, market string, asOf time.Time, lb config.LowBase) (rows []Row, latest string, err error) {
 	companies, err := st.Companies(market)
 	if err != nil {
 		return nil, "", fmt.Errorf("companies: %w", err)
@@ -84,7 +90,7 @@ func loadRows(st *store.Store, market string, asOf time.Time) (rows []Row, lates
 			return nil, "", fmt.Errorf("flows: %w", err)
 		}
 	}
-	if err := addRevenue(st.DB, market, asOf, byTicker); err != nil {
+	if err := addRevenue(st.DB, market, asOf, lb, byTicker); err != nil {
 		return nil, "", fmt.Errorf("revenue: %w", err)
 	}
 
@@ -193,41 +199,127 @@ func addFlows(db *sql.DB, market string, byTicker map[string]*Row) error {
 }
 
 // addRevenue uses only months announced on or before asOf, so the page never
-// shows something the market didn't know yet.
-func addRevenue(db *sql.DB, market string, asOf time.Time, byTicker map[string]*Row) error {
-	q, err := db.Query(`SELECT ticker, month, yoy_pct FROM monthly_revenue
-		WHERE market = ? AND (announced_on = '' OR announced_on <= ?)
-		ORDER BY ticker, month DESC`, market, asOf.Format(dateLayout))
+// shows something the market didn't know yet. Each month's YoY is checked
+// against last year's base (see lowBase); a flagged month is still shown.
+func addRevenue(db *sql.DB, market string, asOf time.Time, lb config.LowBase, byTicker map[string]*Row) error {
+	// Enough history for the YoY window, its base months, and the months before those.
+	from := asOf.AddDate(0, -(revenueMonths + 12 + lb.TypicalMonths + 2), 0)
+	q, err := db.Query(`SELECT ticker, month, revenue, yoy_pct, announced_on FROM monthly_revenue
+		WHERE market = ? AND month >= ? ORDER BY ticker, month`, market, from.Format(dateLayout))
 	if err != nil {
 		return err
 	}
 	defer q.Close()
-	seen := map[string]int{}
-	sums := map[string]float64{}
-	for q.Next() {
-		var ticker, month string
-		var yoy sql.NullFloat64
-		if err := q.Scan(&ticker, &month, &yoy); err != nil {
-			return err
-		}
+
+	type month struct {
+		month     string
+		rev       sql.NullFloat64
+		yoy       sql.NullFloat64
+		announced bool
+	}
+	cutoff := asOf.Format(dateLayout)
+	flush := func(ticker string, months []month) {
 		r := byTicker[ticker]
-		if r == nil || seen[ticker] >= revenueMonths || !yoy.Valid {
-			continue
+		if r == nil {
+			return
 		}
-		if seen[ticker] == 0 {
-			r.RevYoY = ptr(yoy.Float64)
-			if len(month) >= 7 {
-				r.RevMonth = month[:7]
+		revByMonth := map[string]float64{}
+		for _, m := range months {
+			if m.rev.Valid {
+				revByMonth[m.month] = m.rev.Float64
 			}
 		}
-		seen[ticker]++
-		sums[ticker] += yoy.Float64
-		if seen[ticker] == revenueMonths {
-			r.RevYoYAvg = ptr(sums[ticker] / revenueMonths)
+		n, sum := 0, 0.0
+		for i := len(months) - 1; i >= 0 && n < revenueMonths; i-- {
+			m := months[i]
+			if !m.announced || !m.yoy.Valid {
+				continue
+			}
+			low, note := lowBase(m.month, m.rev, m.yoy.Float64, revByMonth, lb)
+			if n == 0 {
+				r.RevYoY = ptr(m.yoy.Float64)
+				r.RevMonth = m.month[:min(7, len(m.month))]
+				r.RevYoYLowBase = low
+			}
+			if low {
+				r.LowBase = true
+				r.LowBaseNotes = append(r.LowBaseNotes, note)
+			}
+			n++
+			sum += m.yoy.Float64
+		}
+		if n == revenueMonths {
+			r.RevYoYAvg = ptr(sum / revenueMonths)
 		}
 	}
+
+	var cur string
+	var months []month
+	for q.Next() {
+		var ticker, m, ann string
+		var rev, yoy sql.NullFloat64
+		if err := q.Scan(&ticker, &m, &rev, &yoy, &ann); err != nil {
+			return err
+		}
+		if ticker != cur {
+			flush(cur, months)
+			cur, months = ticker, months[:0]
+		}
+		months = append(months, month{m, rev, yoy, ann == "" || ann <= cutoff})
+	}
+	flush(cur, months)
 	return q.Err()
 }
+
+// lowBase reports whether the YoY for month m is measured against a base too
+// small to mean anything: last year's same-month revenue below lb.MinBaseNTD,
+// or below lb.MinBaseRatio of the company's average monthly revenue over the
+// lb.TypicalMonths months before that base month. The average, not the median,
+// so lumpy businesses (builders booking a project in one month) count their
+// big months as typical and a quiet month as the low base it is. The base comes from the
+// stored row, or is backed out of the YoY when that row is missing.
+func lowBase(m string, rev sql.NullFloat64, yoy float64, revByMonth map[string]float64, lb config.LowBase) (bool, string) {
+	t, err := time.Parse(dateLayout, m)
+	if err != nil {
+		return false, ""
+	}
+	baseMonth := t.AddDate(-1, 0, 0)
+	base, ok := revByMonth[baseMonth.Format(dateLayout)]
+	if !ok {
+		if !rev.Valid || yoy <= -100 {
+			return false, ""
+		}
+		base = rev.Float64 / (1 + yoy/100)
+	}
+	label := baseMonth.Format("2006-01")
+	if lb.MinBaseNTD > 0 && base < lb.MinBaseNTD {
+		return true, fmt.Sprintf("%s revenue %s, under the %s floor", label, million(base), million(lb.MinBaseNTD))
+	}
+	var prior []float64
+	for i := 1; i <= lb.TypicalMonths; i++ {
+		if v, ok := revByMonth[baseMonth.AddDate(0, -i, 0).Format(dateLayout)]; ok {
+			prior = append(prior, v)
+		}
+	}
+	// Half the window is enough to call something typical.
+	if lb.MinBaseRatio > 0 && len(prior) > 0 && len(prior)*2 >= lb.TypicalMonths {
+		if avg := mean(prior); base < lb.MinBaseRatio*avg {
+			return true, fmt.Sprintf("%s revenue %s, %.0f%% of its usual %s", label, million(base), base/avg*100, million(avg))
+		}
+	}
+	return false, ""
+}
+
+func mean(v []float64) float64 {
+	sum := 0.0
+	for _, x := range v {
+		sum += x
+	}
+	return sum / float64(len(v))
+}
+
+// million formats NTD in 百萬 (millions).
+func million(v float64) string { return fmt.Sprintf("%.1f百萬", v/1e6) }
 
 // dropStale hides companies that have no price within the market's last
 // staleTradingDays trading days (suspended, or missing from the collector).
@@ -246,7 +338,8 @@ func dropStale(db *sql.DB, market, latest string, rows []Row) []Row {
 }
 
 // rank orders by average revenue YoY (the signal Strategy A leads with), then
-// latest YoY, then ticker; companies without revenue go last.
+// latest YoY, then ticker; companies without revenue go last. Low-base rows
+// follow all the others and get no rank number.
 func rank(rows []Row) {
 	val := func(p *float64) float64 {
 		if p == nil {
@@ -256,6 +349,9 @@ func rank(rows []Row) {
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
+		if a.LowBase != b.LowBase {
+			return b.LowBase
+		}
 		if va, vb := val(a.RevYoYAvg), val(b.RevYoYAvg); va != vb {
 			return va > vb
 		}
@@ -264,8 +360,12 @@ func rank(rows []Row) {
 		}
 		return a.Ticker < b.Ticker
 	})
+	n := 0
 	for i := range rows {
-		rows[i].Rank = i + 1
+		if !rows[i].LowBase {
+			n++
+			rows[i].Rank = n
+		}
 	}
 }
 

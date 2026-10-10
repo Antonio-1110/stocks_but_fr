@@ -25,6 +25,11 @@ max_adv_fraction = 0.05        # a buy may not make a position bigger than this 
 adv_days = 20                  # ...its average daily traded value over this many trading days
 min_trade_value = 10_000       # NTD; smaller rebalancing trades are skipped (full exits always happen)
 
+[revenue.low_base]             # YoY off a tiny base is noise: such months are flagged and kept out of rankings
+min_base_ntd = 10_000_000      # last year's same-month revenue below this many NTD is a low base...
+min_base_ratio = 0.3           # ...as is one below this fraction of the company's average monthly revenue...
+typical_months = 12            # ...over this many months before that base month
+
 # Each strategy adds its own [strategy.<name>] section (see its issue).
 
 [strategy.cycle_bottom]        # issue #19: buy cyclicals as revenue YoY turns up

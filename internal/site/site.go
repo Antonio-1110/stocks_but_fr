@@ -36,11 +36,11 @@ type Page struct {
 // Render is the `radar render` step: it writes index.html and the static
 // assets into cfg.Run.PublicDir.
 func Render(_ context.Context, cfg config.Config, st *store.Store) error {
-	return render(st, cfg.Run.PublicDir, time.Now())
+	return render(st, cfg.Run.PublicDir, time.Now(), cfg.Revenue.LowBase)
 }
 
-func render(st *store.Store, dir string, now time.Time) error {
-	rows, latest, err := loadRows(st, model.MarketTW, now)
+func render(st *store.Store, dir string, now time.Time, lb config.LowBase) error {
+	rows, latest, err := loadRows(st, model.MarketTW, now, lb)
 	if err != nil {
 		return err
 	}
@@ -115,6 +115,7 @@ func industries(rows []Row) []string {
 }
 
 var funcs = template.FuncMap{
+	"join": strings.Join,
 	// pct formats a percentage with a sign; nil renders as a dash.
 	"pct": func(p *float64) string {
 		if p == nil {

@@ -12,6 +12,7 @@ type Config struct {
 	Run      Run      `toml:"run"`
 	Costs    Costs    `toml:"costs"`
 	Backtest Backtest `toml:"backtest"`
+	Revenue  Revenue  `toml:"revenue"`
 }
 
 type Run struct {
@@ -39,6 +40,17 @@ type Backtest struct {
 	DesignStart    string  `toml:"design_start"`
 	DesignEnd      string  `toml:"design_end"`
 	TestStart      string  `toml:"test_start"`
+}
+
+type Revenue struct {
+	LowBase LowBase `toml:"low_base"`
+}
+
+// LowBase decides when a revenue YoY is off a base too small to mean anything.
+type LowBase struct {
+	MinBaseNTD    float64 `toml:"min_base_ntd"`
+	MinBaseRatio  float64 `toml:"min_base_ratio"`
+	TypicalMonths int     `toml:"typical_months"`
 }
 
 // Load reads the file at path. Keys missing from the file keep their defaults.
@@ -72,6 +84,7 @@ func Default() Config {
 			DesignEnd:      "2019-12-31",
 			TestStart:      "2020-01-01",
 		},
+		Revenue: Revenue{LowBase: LowBase{MinBaseNTD: 10_000_000, MinBaseRatio: 0.3, TypicalMonths: 12}},
 	}
 }
 

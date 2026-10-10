@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
@@ -57,7 +58,7 @@ func seed(t *testing.T, st *store.Store) {
 	must(t, st.UpsertPrices(prices))
 
 	rev := func(tk, month string, yoy float64, ann string) model.MonthlyRevenue {
-		return model.MonthlyRevenue{Market: tw, Ticker: tk, Month: day(month), YoYPct: yoy, AnnouncedOn: day(ann)}
+		return model.MonthlyRevenue{Market: tw, Ticker: tk, Month: day(month), Revenue: 1e9, YoYPct: yoy, AnnouncedOn: day(ann)}
 	}
 	must(t, st.UpsertMonthlyRevenue([]model.MonthlyRevenue{
 		rev("2330", "2026-06-01", 30, "2026-07-10"),
@@ -85,10 +86,12 @@ func must(t *testing.T, err error) {
 
 var renderDay = day("2026-10-09")
 
+var testLowBase = config.Default().Revenue.LowBase
+
 func TestLoadRows(t *testing.T) {
 	st := openStore(t)
 	seed(t, st)
-	rows, latest, err := loadRows(st, model.MarketTW, renderDay)
+	rows, latest, err := loadRows(st, model.MarketTW, renderDay, testLowBase)
 	must(t, err)
 	if latest != "2026-08-30" {
 		t.Errorf("latest = %q", latest)
@@ -148,7 +151,7 @@ func TestRender(t *testing.T) {
 	must(t, err)
 
 	dir := t.TempDir()
-	must(t, render(st, dir, renderDay))
+	must(t, render(st, dir, renderDay, testLowBase))
 	b, err := os.ReadFile(filepath.Join(dir, "index.html"))
 	must(t, err)
 	html := stdhtml.UnescapeString(string(b))
@@ -185,7 +188,7 @@ func TestRender(t *testing.T) {
 
 func TestRenderEmptyStore(t *testing.T) {
 	dir := t.TempDir()
-	must(t, render(openStore(t), dir, renderDay))
+	must(t, render(openStore(t), dir, renderDay, testLowBase))
 	b, err := os.ReadFile(filepath.Join(dir, "index.html"))
 	must(t, err)
 	if !strings.Contains(string(b), "No companies in the store yet") {
@@ -198,5 +201,67 @@ func TestWithCommas(t *testing.T) {
 		if got := withCommas(n, true); got != want {
 			t.Errorf("withCommas(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+// monthly revenue for one ticker from first, one value per month.
+func revSeries(tk, first string, revs ...float64) []model.MonthlyRevenue {
+	var out []model.MonthlyRevenue
+	m := day(first)
+	for i, v := range revs {
+		r := model.MonthlyRevenue{Market: model.MarketTW, Ticker: tk, Month: m.AddDate(0, i, 0), Revenue: v,
+			AnnouncedOn: m.AddDate(0, i+1, 9)}
+		if i >= 12 && revs[i-12] != 0 {
+			r.YoYPct = (v/revs[i-12] - 1) * 100
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func TestLowBase(t *testing.T) {
+	st := openStore(t)
+	tw := model.MarketTW
+	must(t, st.UpsertCompanies([]model.Company{
+		{Market: tw, Ticker: "1111", Name: "Steady"},
+		{Market: tw, Ticker: "2222", Name: "Dip"},
+		{Market: tw, Ticker: "3333", Name: "Tiny"},
+	}))
+	// 24 months from 2024-09 to 2026-08; the YoY window is 2026-06..08.
+	steady, dip, tiny := make([]float64, 24), make([]float64, 24), make([]float64, 24)
+	for i := range steady {
+		steady[i] = 100e6 * (1 + float64(i)/50) // ~+25% a year
+		dip[i] = 100e6
+		tiny[i] = 5e6
+	}
+	dip[9] = 10e6   // 2025-06: one awful month, 10% of usual...
+	dip[21] = 100e6 // ...so 2026-06 shows +900%
+	tiny[22] = 20e6 // 2026-07 +300%, but every base is under the floor
+	must(t, st.UpsertMonthlyRevenue(revSeries("1111", "2024-09-01", steady...)))
+	must(t, st.UpsertMonthlyRevenue(revSeries("2222", "2024-09-01", dip...)))
+	must(t, st.UpsertMonthlyRevenue(revSeries("3333", "2024-09-01", tiny...)))
+
+	rows, _, err := loadRows(st, tw, renderDay, testLowBase)
+	must(t, err)
+	got := map[string]Row{}
+	for _, r := range rows {
+		got[r.Ticker] = r
+	}
+	if rows[0].Ticker != "1111" || rows[0].Rank != 1 {
+		t.Errorf("clean stock should rank first, got %s #%d", rows[0].Ticker, rows[0].Rank)
+	}
+	dipRow := got["2222"]
+	if !dipRow.LowBase || dipRow.Rank != 0 || dipRow.RevYoYLowBase {
+		t.Errorf("2222: LowBase %v Rank %d latest-flag %v; want flagged, unranked, latest month clean",
+			dipRow.LowBase, dipRow.Rank, dipRow.RevYoYLowBase)
+	}
+	if len(dipRow.LowBaseNotes) != 1 || !strings.Contains(dipRow.LowBaseNotes[0], "2025-06") {
+		t.Errorf("2222 notes = %q", dipRow.LowBaseNotes)
+	}
+	if r := got["3333"]; !r.LowBase || !r.RevYoYLowBase || len(r.LowBaseNotes) != 3 {
+		t.Errorf("3333 should be flagged on all 3 months (floor): %+v", r)
+	}
+	if *dipRow.RevYoYAvg < 300 {
+		t.Errorf("flagged rows keep their YoY: avg = %v", *dipRow.RevYoYAvg)
 	}
 }

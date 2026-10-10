@@ -132,6 +132,16 @@ tbody tr:hover { background: rgba(0, 240, 255, 0.07); box-shadow: inset 2px 0 0 
   border: 1px solid rgba(185, 103, 255, 0.45); letter-spacing: .04em;
 }
 .links a:hover { color: var(--bg); background: var(--yellow); border-color: var(--yellow); text-shadow: none; }
+/* Low-base outliers: growth off a tiny revenue base last year. */
+.lb {
+  display: inline-block; font-size: .6rem; line-height: 1; padding: 2px 4px; letter-spacing: .06em;
+  color: var(--bg); background: var(--yellow); box-shadow: 0 0 8px rgba(249, 240, 2, 0.5);
+}
+tr.lowbase td { opacity: .55; }
+tr.lowbase:hover td { opacity: 1; }
+td.lbval { text-decoration: underline dotted var(--yellow); text-underline-offset: 3px; }
+.toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; cursor: pointer; }
+.toggle input { accent-color: var(--yellow); }
 .ind { color: var(--muted); font-family: var(--cjk); font-size: .85rem; }
 
 footer { margin-top: 24px; font-size: .78rem; }

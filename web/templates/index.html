@@ -39,8 +39,9 @@
       <option value="">All industries</option>
       {{range .Industries}}<option>{{.}}</option>{{end}}
     </select>
+    <label class="toggle" title="Revenue YoY measured against a tiny base last year"><input id="showlow" type="checkbox"> show low-base outliers</label>
   </div>
-  <p class="muted hint">Ranked by 3-month average revenue YoY. Tap a column header to sort.</p>
+  <p class="muted hint">Ranked by 3-month average revenue YoY. Stocks whose growth is off a tiny revenue base last year are marked <span class="lb">LOW BASE</span> and left out of the ranking. Tap a column header to sort.</p>
   <table id="list">
     <thead><tr>
       <th data-type="num" class="num">#</th>
@@ -57,8 +58,8 @@
     </tr></thead>
     <tbody>
     {{range .Rows}}{{$l := .Links}}
-    <tr data-industry="{{.Industry}}" data-search="{{.Ticker}} {{.Name}} {{.Industry}}">
-      <td class="num rank" data-sort="{{.Rank}}">{{.Rank}}</td>
+    <tr data-industry="{{.Industry}}" data-search="{{.Ticker}} {{.Name}} {{.Industry}}"{{if .LowBase}} class="lowbase" data-lowbase{{end}}>
+      {{if .LowBase}}<td class="num rank" data-sort="" title="Low base: {{join .LowBaseNotes "; "}}"><span class="lb">LB</span></td>{{else}}<td class="num rank" data-sort="{{.Rank}}">{{.Rank}}</td>{{end}}
       <td class="co" data-sort="{{.Ticker}}">
         <a class="name" href="{{$l.Goodinfo}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b> {{.Name}}</a>
         <span class="links"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener">Goodinfo</a><a href="{{$l.Yahoo}}" target="_blank" rel="noopener">Yahoo</a><a href="{{$l.MOPS}}" target="_blank" rel="noopener">MOPS</a></span>
@@ -66,8 +67,8 @@
       <td class="ind" data-label="Industry">{{.Industry}}</td>
       <td class="num" data-label="Price" data-sort="{{sortVal .LastClose}}">{{price .LastClose}}</td>
       <td class="num {{sign .Change1M}}" data-label="1M" data-sort="{{sortVal .Change1M}}">{{pct .Change1M}}</td>
-      <td class="num {{sign .RevYoY}}" data-label="Rev YoY" data-sort="{{sortVal .RevYoY}}" title="{{.RevMonth}}">{{pct .RevYoY}}</td>
-      <td class="num {{sign .RevYoYAvg}}" data-label="Rev 3M" data-sort="{{sortVal .RevYoYAvg}}">{{pct .RevYoYAvg}}</td>
+      <td class="num {{sign .RevYoY}}{{if .RevYoYLowBase}} lbval{{end}}" data-label="Rev YoY" data-sort="{{sortVal .RevYoY}}" title="{{.RevMonth}}{{if .RevYoYLowBase}} · low base{{end}}">{{pct .RevYoY}}</td>
+      <td class="num {{sign .RevYoYAvg}}{{if .LowBase}} lbval{{end}}" data-label="Rev 3M" data-sort="{{sortVal .RevYoYAvg}}"{{if .LowBase}} title="Low base: {{join .LowBaseNotes "; "}}"{{end}}>{{pct .RevYoYAvg}}</td>
       <td class="num" data-label="vs 52w high" data-sort="{{sortVal .FromHigh}}">{{pct .FromHigh}}</td>
       <td class="num {{sign .TrustNet10}}" data-label="投信 10d" data-sort="{{sortVal .TrustNet10}}">{{lots .TrustNet10}}</td>
       <td class="num {{sign .ForeignNet10}}" data-label="外資 10d" data-sort="{{sortVal .ForeignNet10}}">{{lots .ForeignNet10}}</td>

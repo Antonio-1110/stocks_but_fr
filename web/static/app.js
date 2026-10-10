@@ -7,6 +7,7 @@
   var q = document.getElementById("q");
   var industry = document.getElementById("industry");
   var count = document.getElementById("count");
+  var showLow = document.getElementById("showlow");
 
   function sortKey(row, col) {
     var cell = row.cells[col];
@@ -43,7 +44,8 @@
     var shown = 0;
     rows.forEach(function (r) {
       var text = (r.getAttribute("data-search") || "").toLowerCase();
-      var ok = (!ind || r.getAttribute("data-industry") === ind) &&
+      var ok = (showLow.checked || !r.hasAttribute("data-lowbase")) &&
+        (!ind || r.getAttribute("data-industry") === ind) &&
         words.every(function (w) { return text.indexOf(w) !== -1; });
       r.hidden = !ok;
       if (ok) shown++;
@@ -52,4 +54,6 @@
   }
   q.addEventListener("input", filter);
   industry.addEventListener("change", filter);
+  showLow.addEventListener("change", filter);
+  filter(); // low-base rows start hidden
 })();
