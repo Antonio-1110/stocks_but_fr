@@ -4,17 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
 <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
+<div class="scanlines" aria-hidden="true"></div>
 <header>
-  <h1>{{.Title}}</h1>
-  <p class="stamp">Last updated {{.GeneratedAt}}{{if .PriceDate}} · prices as of {{.PriceDate}}{{end}}</p>
+  <p class="sys">SYS://TW-RADAR <span class="blink">_</span></p>
+  <h1 data-text="{{.Title}}">{{.Title}}</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{if .PriceDate}} <span class="sep">//</span> <b>prices as of {{.PriceDate}}</b>{{end}}</p>
 </header>
 
 <main>
-<section class="backtest">
-  <h2>Backtest summary</h2>
+<section class="panel backtest">
+  <h2><span class="idx">01</span> Backtest summary</h2>
   {{if .Backtest}}
   <dl>
     {{range .Backtest}}<div><dt>{{.Name}}</dt><dd>{{.Value}}</dd></div>{{end}}
@@ -24,60 +30,59 @@
   {{end}}
 </section>
 
-<section>
-  <h2>Companies <span class="muted" id="count">{{len .Rows}}</span></h2>
+<section class="panel">
+  <h2><span class="idx">02</span> Companies <span class="count" id="count">{{len .Rows}}</span></h2>
   {{if .Rows}}
   <div class="filters">
-    <input id="q" type="search" placeholder="Filter: ticker, name, industry" aria-label="Filter">
+    <input id="q" type="search" placeholder="&gt; filter: ticker, name, industry" aria-label="Filter">
     <select id="industry" aria-label="Industry">
       <option value="">All industries</option>
       {{range .Industries}}<option>{{.}}</option>{{end}}
     </select>
   </div>
   <p class="muted hint">Ranked by 3-month average revenue YoY. Tap a column header to sort.</p>
-  <div class="scroll">
   <table id="list">
     <thead><tr>
       <th data-type="num" class="num">#</th>
       <th data-type="text">Company</th>
-      <th data-type="text" class="hide-sm">Industry</th>
+      <th data-type="text">Industry</th>
       <th data-type="num" class="num">Price</th>
-      <th data-type="num" class="num">1M</th>
+      <th data-type="num" class="num" title="Price change over 21 trading days">1M</th>
       <th data-type="num" class="num" title="Revenue YoY, latest announced month">Rev YoY</th>
-      <th data-type="num" class="num" title="Revenue YoY, average of last 3 announced months">3M avg</th>
+      <th data-type="num" class="num" title="Revenue YoY, average of last 3 announced months">Rev 3M avg</th>
       <th data-type="num" class="num" title="Distance from 52-week high">vs 52w high</th>
       <th data-type="num" class="num" title="投信 net buy, last 10 trading days (張)">投信 10d</th>
-      <th data-type="num" class="num hide-sm" title="外資 net buy, last 10 trading days (張)">外資 10d</th>
-      <th data-type="num" class="num hide-sm" title="Average daily traded value, 20 days">Value 20d</th>
-      <th>Links</th>
+      <th data-type="num" class="num" title="外資 net buy, last 10 trading days (張)">外資 10d</th>
+      <th data-type="num" class="num" title="Average daily traded value, 20 days">Value 20d</th>
     </tr></thead>
     <tbody>
     {{range .Rows}}{{$l := .Links}}
-    <tr data-industry="{{.Industry}}">
-      <td class="num" data-sort="{{.Rank}}">{{.Rank}}</td>
-      <td data-sort="{{.Ticker}}"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b> {{.Name}}</a></td>
-      <td class="hide-sm">{{.Industry}}</td>
-      <td class="num" data-sort="{{sortVal .LastClose}}">{{price .LastClose}}</td>
-      <td class="num {{sign .Change1M}}" data-sort="{{sortVal .Change1M}}">{{pct .Change1M}}</td>
-      <td class="num {{sign .RevYoY}}" data-sort="{{sortVal .RevYoY}}" title="{{.RevMonth}}">{{pct .RevYoY}}</td>
-      <td class="num {{sign .RevYoYAvg}}" data-sort="{{sortVal .RevYoYAvg}}">{{pct .RevYoYAvg}}</td>
-      <td class="num" data-sort="{{sortVal .FromHigh}}">{{pct .FromHigh}}</td>
-      <td class="num {{sign .TrustNet10}}" data-sort="{{sortVal .TrustNet10}}">{{lots .TrustNet10}}</td>
-      <td class="num hide-sm {{sign .ForeignNet10}}" data-sort="{{sortVal .ForeignNet10}}">{{lots .ForeignNet10}}</td>
-      <td class="num hide-sm" data-sort="{{sortVal .Turnover20}}">{{yi .Turnover20}}</td>
-      <td class="links"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener">Goodinfo</a> <a href="{{$l.Yahoo}}" target="_blank" rel="noopener">Yahoo</a> <a href="{{$l.MOPS}}" target="_blank" rel="noopener">MOPS</a></td>
+    <tr data-industry="{{.Industry}}" data-search="{{.Ticker}} {{.Name}} {{.Industry}}">
+      <td class="num rank" data-sort="{{.Rank}}">{{.Rank}}</td>
+      <td class="co" data-sort="{{.Ticker}}">
+        <a class="name" href="{{$l.Goodinfo}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b> {{.Name}}</a>
+        <span class="links"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener">Goodinfo</a><a href="{{$l.Yahoo}}" target="_blank" rel="noopener">Yahoo</a><a href="{{$l.MOPS}}" target="_blank" rel="noopener">MOPS</a></span>
+      </td>
+      <td class="ind" data-label="Industry">{{.Industry}}</td>
+      <td class="num" data-label="Price" data-sort="{{sortVal .LastClose}}">{{price .LastClose}}</td>
+      <td class="num {{sign .Change1M}}" data-label="1M" data-sort="{{sortVal .Change1M}}">{{pct .Change1M}}</td>
+      <td class="num {{sign .RevYoY}}" data-label="Rev YoY" data-sort="{{sortVal .RevYoY}}" title="{{.RevMonth}}">{{pct .RevYoY}}</td>
+      <td class="num {{sign .RevYoYAvg}}" data-label="Rev 3M" data-sort="{{sortVal .RevYoYAvg}}">{{pct .RevYoYAvg}}</td>
+      <td class="num" data-label="vs 52w high" data-sort="{{sortVal .FromHigh}}">{{pct .FromHigh}}</td>
+      <td class="num {{sign .TrustNet10}}" data-label="投信 10d" data-sort="{{sortVal .TrustNet10}}">{{lots .TrustNet10}}</td>
+      <td class="num {{sign .ForeignNet10}}" data-label="外資 10d" data-sort="{{sortVal .ForeignNet10}}">{{lots .ForeignNet10}}</td>
+      <td class="num" data-label="Value 20d" data-sort="{{sortVal .Turnover20}}">{{yi .Turnover20}}</td>
     </tr>
     {{end}}
     </tbody>
   </table>
-  </div>
   {{else}}
   <p class="muted">No companies in the store yet. Run <code>radar collect</code> first.</p>
   {{end}}
 </section>
 </main>
 
-<footer class="muted">Not financial advice. Colours follow Taiwan convention: red is up, green is down.</footer>
+<footer class="muted">Not financial advice. Colours follow Taiwan convention: <span class="up">red is up</span>, <span class="down">green is down</span>.</footer>
 <script src="static/app.js"></script>
 </body>
 </html>

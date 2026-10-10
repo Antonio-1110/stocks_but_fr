@@ -42,7 +42,7 @@
     var ind = industry.value;
     var shown = 0;
     rows.forEach(function (r) {
-      var text = (r.cells[1].textContent + " " + r.cells[2].textContent).toLowerCase();
+      var text = (r.getAttribute("data-search") || "").toLowerCase();
       var ok = (!ind || r.getAttribute("data-industry") === ind) &&
         words.every(function (w) { return text.indexOf(w) !== -1; });
       r.hidden = !ok;
