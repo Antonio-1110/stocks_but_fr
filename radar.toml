@@ -57,3 +57,31 @@ trust_filter = false           # require 投信 net buying (the script runs both
 trust_days = 10                # 投信 net buy summed over this many trading days
 stop_loss = 0.15               # sell between rebalances when 15% below the buy-day close
 stop_ma_days = 0               # >0 also sells on a close below this moving average
+
+[strategy.dca]                 # issue #20: average down as a stock falls, sell on a small bounce
+variant = "martingale"         # default table for `make`; `python3 -m strategies.dca` runs every table
+universe_size = 150            # only the most traded common stocks that day (large/mid caps)...
+universe_days = 60             # ...by average traded value over this many trading days...
+min_avg_turnover = 50_000_000  # ...and at least this many NTD a day
+entry_drop = 0.10              # start a cycle when the close is this far below...
+entry_high_days = 60           # ...its highest close over this many trading days
+max_cycles = 5                 # stocks being averaged down at the same time
+base_order = 50_000            # NTD, first buy of a cycle
+add_step = 0.05                # buy again each time the close is this far below the last buy
+multiplier = 2.0               # add k is base_order x multiplier^k (2 = martingale, 1 = plain DCA)
+take_profit = 0.01             # sell all when the close is this far above the average cost
+max_adds = 0                   # 0 = no limit
+stop_loss = 0.0                # sell all this far below the average cost; 0 = no stop
+# Market drawdowns reported separately (TAIEX peak to trough). 2008 is before history_start.
+stress_windows = [
+  ["2008", "2008-05-19", "2008-11-20"],
+  ["2015", "2015-04-28", "2015-08-24"],
+  ["2020", "2020-01-14", "2020-03-19"],
+  ["2022", "2022-01-05", "2022-10-25"],
+]
+
+[strategy.dca.martingale]      # as the owner described it: no cap on adds, no stop
+
+[strategy.dca.capped]          # same, but at most 3 adds and a hard stop
+max_adds = 3
+stop_loss = 0.20
