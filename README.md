@@ -26,6 +26,12 @@ site changes go live in minutes. Download the database to backtest locally:
 
     gh release download data --pattern radar.db.gz --dir data && gunzip data/radar.db.gz
 
+The release also keeps `radar.prev.db.gz` (the copy before the latest run) and
+`radar-YYYY-MM-DD.db.gz` (the first run of each of the last 7 Taipei days). To
+roll back after a bad run, cancel any queued `daily` run, delete the
+`radar.db.gz` asset on the release page and rename the copy you want to
+`radar.db.gz`; the next run starts from it.
+
 ## Calendar
 
 `public/calendar.html` (linked from the dashboard) marks 法說會, ex-dividend

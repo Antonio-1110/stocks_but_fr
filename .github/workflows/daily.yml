@@ -23,6 +23,7 @@ on:
 env:
   DATA_TAG: data
   DB_ASSET: radar.db.gz
+  PREV_ASSET: radar.prev.db.gz   # the copy before the latest run
   TZ: Asia/Taipei
 
 jobs:
@@ -105,10 +106,34 @@ jobs:
               --notes "Latest data/radar.db, replaced by the daily workflow. Not a software release."
           fi
           gh release upload "$DATA_TAG" "$DB_ASSET.new" --clobber
-          gh release delete-asset "$DATA_TAG" "$DB_ASSET" --yes 2>/dev/null || true
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" \
-            -q ".assets[] | select(.name == \"$DB_ASSET.new\") | .id")
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$id" -f name="$DB_ASSET" >/dev/null
+          # Nothing is deleted until a newer copy exists (issue #38): the copy
+          # this run replaces becomes $PREV_ASSET (one run back), and the first
+          # run of each Taipei day also keeps a dated copy for a week. To roll
+          # back, see README "Daily run".
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
+          rename() { gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$1" -f name="$2" >/dev/null; }
+          old=$(asset_id "$DB_ASSET")
+          if [ -n "$old" ]; then
+            prev=$(asset_id "$PREV_ASSET")
+            if [ -n "$prev" ]; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$prev"
+            fi
+            rename "$old" "$PREV_ASSET"
+          fi
+          rename "$(asset_id "$DB_ASSET.new")" "$DB_ASSET"
+          daily="radar-$(date +%F).db.gz"
+          if [ -z "$(asset_id "$daily")" ]; then
+            mv "$DB_ASSET.new" "$daily"
+            gh release upload "$DATA_TAG" "$daily"
+          fi
+          cutoff="radar-$(date -d '7 days ago' +%F).db.gz"
+          while read -r id name; do
+            if [[ $name =~ ^radar-[0-9]{4}-[0-9]{2}-[0-9]{2}\.db\.gz$ && $name < $cutoff ]]; then
+              echo "Deleting old snapshot $name"
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+            fi
+          done <<<"$assets"
 
       # GitHub starts few of the hourly scheduled runs, so while a backfill is
       # incomplete each run starts the next one. The `daily` group keeps at
