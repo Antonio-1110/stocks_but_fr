@@ -275,3 +275,29 @@ func TestOldTickerRefetchesEvents(t *testing.T) {
 		t.Errorf("update after a week: calls = %v", *calls)
 	}
 }
+
+// Make-up trading Saturdays (the benchmark traded) are fetched; other
+// weekends are not.
+func TestTPExMakeUpSaturday(t *testing.T) {
+	st := openStore(t)
+	if _, err := st.DB.Exec(daysTable); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertPrices([]model.Price{{Market: model.MarketTW, Ticker: "0050", Date: parseDay("2012-02-04"), Close: 50, AdjClose: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	tp, calls := fakeTPEx(t)
+	now := time.Date(2012, 2, 13, 18, 0, 0, 0, taipei)
+	if _, _, err := tpexDays(context.Background(), tp, st, newDirty(), parseDay("2012-02-03"), now, "0050"); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(*calls, " ")
+	if !strings.Contains(got, "2012/02/04") {
+		t.Errorf("make-up Saturday not fetched: %s", got)
+	}
+	for _, weekend := range []string{"2012/02/05", "2012/02/11", "2012/02/12"} {
+		if strings.Contains(got, weekend) {
+			t.Errorf("fetched %s: %s", weekend, got)
+		}
+	}
+}

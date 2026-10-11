@@ -135,10 +135,28 @@ func tpexEvents(ctx context.Context, c *TPEx, st *store.Store, d *dirtySet, star
 }
 
 // tpexDays fetches daily quotes for weekdays from start to the latest day
-// with published data, newest first, until done or out of run time.
-func tpexDays(ctx context.Context, c *TPEx, st *store.Store, d *dirtySet, start, now time.Time) (fetched, left int, err error) {
+// with published data, newest first, until done or out of run time. A
+// Saturday is fetched too when the benchmark traded on it: a make-up trading
+// day, which both exchanges open for (2012-02-04, 2018-12-22, ...).
+func tpexDays(ctx context.Context, c *TPEx, st *store.Store, d *dirtySet, start, now time.Time, bench string) (fetched, left int, err error) {
+	makeUp := map[string]bool{}
+	rows, err := st.DB.Query(`SELECT date FROM prices WHERE market = ? AND ticker = ? AND strftime('%w', date) = '6'`,
+		model.MarketTW, bench)
+	if err != nil {
+		return 0, 0, err
+	}
+	for rows.Next() {
+		var day string
+		if err := rows.Scan(&day); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		makeUp[day] = true
+	}
+	rows.Close()
+
 	done := map[string]bool{}
-	rows, err := st.DB.Query(`SELECT date FROM tw_price_days WHERE exchange = 'TPEx'`)
+	rows, err = st.DB.Query(`SELECT date FROM tw_price_days WHERE exchange = 'TPEx'`)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -159,7 +177,8 @@ func tpexDays(ctx context.Context, c *TPEx, st *store.Store, d *dirtySet, start,
 	}
 	var todo []time.Time
 	for day := last; !day.Before(start); day = day.AddDate(0, 0, -1) {
-		if wd := day.Weekday(); wd != time.Saturday && wd != time.Sunday && !done[day.Format("2006-01-02")] {
+		key := day.Format("2006-01-02")
+		if wd := day.Weekday(); (wd != time.Saturday || makeUp[key]) && wd != time.Sunday && !done[key] {
 			todo = append(todo, day)
 		}
 	}

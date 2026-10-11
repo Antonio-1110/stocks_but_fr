@@ -81,7 +81,7 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 		if err := tpexEvents(ctx, tp, st, dirty, start.Year(), now); err != nil {
 			log.Printf("tw: TPEx events: %v", err)
 		}
-		fetched, left, err := tpexDays(ctx, tp, st, dirty, start, now)
+		fetched, left, err := tpexDays(ctx, tp, st, dirty, start, now, cfg.Backtest.Benchmark)
 		log.Printf("tw: TPEx: fetched %d days, %d left for later runs", fetched, left)
 		tpexErr = err
 	}()
