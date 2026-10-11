@@ -1,12 +1,12 @@
 # stocks_but_fr
 
-A personal theme radar for US and Taiwan stocks. It watches what's being
-talked about (Reddit, StockTwits, PTT, news), spots themes whose chatter is
-accelerating, maps each theme to the listed companies exposed to it, and
-publishes a static site with a card per company, so the names become
-familiar before the move is over.
+A personal stock research terminal, Taiwan first: it collects daily prices,
+monthly revenue and institutional flows, ranks stocks worth a closer look on a
+static dashboard, backtests strategies honestly, and paper-trades the ones that
+hold up. Goals and non-goals: [PRODUCT.md](PRODUCT.md). Plans:
+[ROADMAP.md](ROADMAP.md).
 
-Status: just started. The to-do list is the repo's GitHub Issues.
+The to-do list is the repo's GitHub Issues.
 
 Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 

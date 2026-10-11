@@ -4,6 +4,10 @@ Read this whole file before editing any code. These rules come from the repo
 owner and override any default habit of yours (including "make a branch and
 open a PR").
 
+What the product is for, and what is planned, deferred or cut:
+[PRODUCT.md](PRODUCT.md) and [ROADMAP.md](ROADMAP.md). Update ROADMAP.md when a
+sprint ends.
+
 ## 1. One branch: `main`
 
 This project is pre-product. There are no feature branches and no pull
