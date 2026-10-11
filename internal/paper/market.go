@@ -146,7 +146,7 @@ func loadMarket(db *sql.DB, days int, since string, minCoverage float64) (*marke
 		from = since
 	}
 
-	q, err = db.Query(`SELECT ticker, date, open, close, adj_close, turnover FROM prices
+	q, err = db.Query(`SELECT ticker, date, open, high, low, close, adj_close, turnover FROM prices
 		WHERE market = 'TW' AND date >= ?`, from)
 	if err != nil {
 		return nil, err
@@ -155,8 +155,8 @@ func loadMarket(db *sql.DB, days int, since string, minCoverage float64) (*marke
 	for q.Next() {
 		var t string
 		var b bar
-		var o, c, a, v sql.NullFloat64
-		if err := q.Scan(&t, &b.date, &o, &c, &a, &v); err != nil {
+		var o, hi, lo, c, a, v sql.NullFloat64
+		if err := q.Scan(&t, &b.date, &o, &hi, &lo, &c, &a, &v); err != nil {
 			q.Close()
 			return nil, err
 		}
@@ -166,6 +166,11 @@ func loadMarket(db *sql.DB, days int, since string, minCoverage float64) (*marke
 		b.open, b.close, b.adj, b.turnout = o.Float64, c.Float64, a.Float64, v.Float64
 		if !a.Valid || a.Float64 <= 0 {
 			b.adj = b.close
+		}
+		// An open outside the day's low-high range can't have traded (FinMind
+		// has many on TWSE stocks): fill at the close instead, as the backtest does.
+		if hi.Float64 > 0 && lo.Float64 > 0 && (b.open > hi.Float64 || b.open < lo.Float64) {
+			b.open = b.close
 		}
 		if m.bars[t] == nil {
 			m.bars[t] = map[string]bar{}

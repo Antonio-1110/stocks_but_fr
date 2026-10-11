@@ -165,3 +165,15 @@ def test_buy_and_hold_waits_for_liquidity_history(db, md):
     [buy] = res.fills
     assert buy.day == md.calendar[20]
     assert res.invested.iloc[-1] > 0.99 * res.equity.iloc[-1]
+
+
+def test_open_outside_days_range_falls_back_to_close(db):
+    # A FinMind-style bad open: above the day's high. Fills must not use it.
+    con = sqlite3.connect(db)
+    con.execute("UPDATE prices SET open = 999 WHERE ticker = '2222' AND date = '2020-01-02'")
+    con.commit()
+    con.close()
+    md = data.load(db)
+    day = pd.Timestamp("2020-01-02")
+    assert md.open.at[day, "2222"] == md.close.at[day, "2222"] == 20.0
+    assert md.adj_open.at[day, "2222"] == 20.0

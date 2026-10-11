@@ -113,7 +113,7 @@ def load(db_path: str | Path, tickers: list[str] | None = None) -> MarketData:
             where += f" AND ticker IN ({','.join('?' * len(tickers))})"
             args += tickers
         prices = pd.read_sql_query(
-            f"SELECT ticker, date, open, close, adj_close, volume, turnover FROM prices WHERE {where}",
+            f"SELECT ticker, date, open, high, low, close, adj_close, volume, turnover FROM prices WHERE {where}",
             con, params=args)
         companies = pd.read_sql_query(
             "SELECT ticker, name, industry, exchange, listed_on, delisted_on FROM companies WHERE market = ?",
@@ -132,6 +132,11 @@ def load(db_path: str | Path, tickers: list[str] | None = None) -> MarketData:
     prices["date"] = _date(prices["date"])
     # Suspended or broken rows: no usable close means no trade that day.
     prices = prices[prices["close"] > 0]
+    # An open outside the day's low-high range can't have traded (FinMind has
+    # tens of thousands of these on TWSE stocks): treat it like a missing open.
+    bad_open = prices["high"].gt(0) & prices["low"].gt(0) & (
+        prices["open"].gt(prices["high"]) | prices["open"].lt(prices["low"]))
+    prices.loc[bad_open, "open"] = 0.0
     wide = {c: prices.pivot(index="date", columns="ticker", values=c).sort_index()
             for c in ("open", "close", "adj_close", "volume", "turnover")}
     adj_close = wide["adj_close"].where(wide["adj_close"] > 0, wide["close"])

@@ -223,3 +223,19 @@ func TestMomentumRebalanceWaitsForRevenueCoverage(t *testing.T) {
 		t.Errorf("rebalanced on 25%% revenue coverage: %d orders, last rebalance %q", len(orders), b.LastRebalance)
 	}
 }
+
+func TestOpenOutsideDaysRangeFillsAtClose(t *testing.T) {
+	st := openStore(t)
+	must(t, st.UpsertPrices([]model.Price{
+		{Market: model.MarketTW, Ticker: "1337", Date: day("2026-10-01"), Open: 100.16, High: 115, Low: 114.5, Close: 115, AdjClose: 115},
+		{Market: model.MarketTW, Ticker: "2330", Date: day("2026-10-01"), Open: 0, Close: 10, AdjClose: 10},
+	}))
+	m, err := loadMarket(st.DB, 60, "", 0)
+	must(t, err)
+	if b, _ := m.on("1337", "2026-10-01"); b.open != 115 {
+		t.Errorf("open = %v, want the close 115", b.open)
+	}
+	if b, _ := m.on("2330", "2026-10-01"); b.open != 0 {
+		t.Errorf("no high/low stored: open = %v, want it left alone", b.open)
+	}
+}

@@ -39,6 +39,8 @@ summing to at most 1) to rebalance at the next open, or `None` to do nothing.
   happens if the collector simply hasn't updated that stock yet, so refresh
   data before trusting the last weeks of a run.
 - A stock with no price on the fill day is skipped and counted in the report.
+- An open outside the day's low-high range (FinMind has many on TWSE stocks)
+  is treated as missing, so that day fills at the close.
 
 ## Checked against real data (issue #23)
 
