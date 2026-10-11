@@ -91,17 +91,29 @@ func run(ctx context.Context, cfg config.Config, st *store.Store, s sender, now 
 }
 
 func ruleFor(name string, cfg config.Config, st *store.Store) (rule, error) {
+	// Both rules rank on monthly revenue, so both wait while the month they
+	// would use is collected for too little of the market (issue #37).
+	gate := func(rank func(time.Time) ([]Hit, string, error)) func(time.Time) ([]Hit, string, error) {
+		return func(now time.Time) ([]Hit, string, error) {
+			month := revenueMonth(now, cfg.Strategy.RevenueMomentum.RevenueDeadlineDay)
+			ok, note, err := RevenueReady(st.DB, month, now, cfg.Revenue.MinCoverage)
+			if err != nil || !ok {
+				return nil, note, err
+			}
+			return rank(now)
+		}
+	}
 	switch name {
 	case "revenue_momentum":
 		p := cfg.Strategy.RevenueMomentum
-		return rule{name, "Revenue momentum", p.TopN, p.ExitRank, func(now time.Time) ([]Hit, string, error) {
+		return rule{name, "Revenue momentum", p.TopN, p.ExitRank, gate(func(now time.Time) ([]Hit, string, error) {
 			return revenueMomentum(st.DB, now, p)
-		}}, nil
+		})}, nil
 	case "unpriced":
 		a := cfg.Alerts
-		return rule{name, "Growth not yet priced in", a.UnpricedTop, a.UnpricedExit, func(now time.Time) ([]Hit, string, error) {
+		return rule{name, "Growth not yet priced in", a.UnpricedTop, a.UnpricedExit, gate(func(now time.Time) ([]Hit, string, error) {
 			return unpriced(st, now, cfg)
-		}}, nil
+		})}, nil
 	}
 	return rule{}, fmt.Errorf("unknown rule %q (want revenue_momentum or unpriced)", name)
 }

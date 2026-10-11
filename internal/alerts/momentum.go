@@ -32,10 +32,7 @@ func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit
 	}
 	latest, start, advStart := dates[0], dates[len(dates)-1], dates[p.ADVDays-1]
 
-	newest := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0)
-	if now.Day() <= p.RevenueDeadlineDay {
-		newest = newest.AddDate(0, -1, 0)
-	}
+	newest := revenueMonth(now, p.RevenueDeadlineDay)
 	asOf := fmt.Sprintf("prices %s · revenue to %s", latest, newest.Format("2006-01"))
 
 	type stock struct {

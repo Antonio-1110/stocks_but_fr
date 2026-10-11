@@ -48,6 +48,9 @@ type Backtest struct {
 
 type Revenue struct {
 	LowBase LowBase `toml:"low_base"`
+	// MinCoverage: paper portfolios and alerts use a revenue month only once
+	// this share of listed stocks has it (issue #37). 0 turns the check off.
+	MinCoverage float64 `toml:"min_coverage"`
 }
 
 // LowBase decides when a revenue YoY is off a base too small to mean anything.
@@ -161,7 +164,7 @@ func Default() Config {
 			DesignEnd:      "2019-12-31",
 			TestStart:      "2020-01-01",
 		},
-		Revenue: Revenue{LowBase: LowBase{MinBaseNTD: 10_000_000, MinBaseRatio: 0.3, TypicalMonths: 12}},
+		Revenue: Revenue{LowBase: LowBase{MinBaseNTD: 10_000_000, MinBaseRatio: 0.3, TypicalMonths: 12}, MinCoverage: 0.9},
 		Site: Site{Unpriced: Unpriced{
 			MinGrowthPct:   20,
 			MinTurnoverNTD: 10_000_000,
@@ -219,6 +222,7 @@ func (c Config) validate() error {
 		"costs.tw.sell_tax":           c.Costs.TW.SellTax,
 		"costs.tw.etf_sell_tax":       c.Costs.TW.ETFSellTax,
 		"costs.tw.day_trade_sell_tax": c.Costs.TW.DayTradeSellTax,
+		"revenue.min_coverage":        c.Revenue.MinCoverage,
 	}
 	for name, v := range rates {
 		if v < 0 || v > 1 {

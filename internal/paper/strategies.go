@@ -25,8 +25,9 @@ import (
 // One difference from the backtest: kept holdings are not trimmed or topped
 // up to equal weight every month, which saves a round of fees and tax.
 type momentum struct {
-	p  config.RevenueMomentum
-	db *sql.DB
+	p      config.RevenueMomentum
+	db     *sql.DB
+	minCov float64 // [revenue] min_coverage
 }
 
 func (s momentum) decide(m *market, b *book, h holdings) ([]*order, error) {
@@ -36,6 +37,16 @@ func (s momentum) decide(m *market, b *book, h holdings) ([]*order, error) {
 		return s.stops(m, b, h), nil
 	}
 	at, _ := time.ParseInLocation(dateLayout, day, taipei)
+	// Ranking on a month most companies don't have yet would pick from part
+	// of the market (issue #37): keep the stops, rebalance on a later close.
+	ready, note, err := alerts.RevenueReady(s.db, alerts.RevenueMonth(at, s.p.RevenueDeadlineDay), at, s.minCov)
+	if err != nil {
+		return nil, err
+	}
+	if !ready {
+		log.Printf("paper: revenue_momentum: %s; rebalance waits", note)
+		return s.stops(m, b, h), nil
+	}
 	hits, asOf, err := alerts.RevenueMomentum(s.db, at.Add(18*time.Hour), s.p)
 	if err != nil {
 		return nil, err
@@ -145,8 +156,9 @@ func rebalanceDay(m *market, day string, deadline int) bool {
 // 1/max_positions of equity and then runs. A stock stopped out can't come back
 // until a newer revenue month is out.
 type cycle struct {
-	p  config.CycleBottom
-	db *sql.DB
+	p      config.CycleBottom
+	db     *sql.DB
+	minCov float64 // [revenue] min_coverage
 }
 
 func (s cycle) decide(m *market, b *book, h holdings) ([]*order, error) {
@@ -189,6 +201,18 @@ func (s cycle) decide(m *market, b *book, h holdings) ([]*order, error) {
 
 	slots := s.p.MaxPositions - left - h.buys
 	if slots <= 0 {
+		return out, nil
+	}
+	// Exits above use each holding's own revenue; new buys wait until the
+	// latest month is collected for most of the market (issue #37).
+	end, _ := time.Parse(dateLayout, latest)
+	at, _ := time.Parse(dateLayout, day)
+	ready, note, err := alerts.RevenueReady(s.db, end, at, s.minCov)
+	if err != nil {
+		return nil, err
+	}
+	if !ready {
+		log.Printf("paper: cycle_bottom: %s; buys wait", note)
 		return out, nil
 	}
 	type cand struct {

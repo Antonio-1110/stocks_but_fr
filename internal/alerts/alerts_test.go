@@ -278,3 +278,40 @@ func tickers(h []Hit) string {
 	}
 	return strings.Join(s, ",")
 }
+
+func TestRulesWaitForRevenueCoverage(t *testing.T) {
+	st := openStore(t)
+	seedMarket(t, st)
+	cfg := config.Default()
+	cfg.Strategy.RevenueMomentum.HighDays, cfg.Strategy.RevenueMomentum.ADVDays = 20, 5
+
+	ok, note, err := RevenueReady(st.DB, day("2026-09-01"), day("2026-10-11"), 0.9)
+	must(t, err)
+	if !ok {
+		t.Fatalf("all four listed stocks have September: %s", note)
+	}
+	// A listed stock that trades but has no revenue yet (still being backfilled).
+	must(t, st.UpsertCompanies([]model.Company{{Market: model.MarketTW, Ticker: "2412", Name: "中華電"}}))
+	must(t, st.UpsertPrices([]model.Price{{Market: model.MarketTW, Ticker: "2412", Date: day("2026-09-25"), Close: 120, AdjClose: 120}}))
+	ok, note, err = RevenueReady(st.DB, day("2026-09-01"), day("2026-10-11"), 0.9)
+	must(t, err)
+	if ok || !strings.Contains(note, "4 of 5") {
+		t.Fatalf("4 of 5 is below 90%%: ok=%v %s", ok, note)
+	}
+
+	s := &fakeSender{}
+	must(t, run(context.Background(), cfg, st, s, day("2026-10-11")))
+	if len(s.sent) != 0 {
+		t.Fatalf("sent %q while revenue is incomplete", s.sent)
+	}
+	var n int
+	must(t, st.DB.QueryRow(`SELECT COUNT(*) FROM alert_rules`).Scan(&n))
+	if n != 0 {
+		t.Errorf("rules seeded on incomplete revenue: %d", n)
+	}
+	cfg.Revenue.MinCoverage = 0 // the check off: ranks as before
+	must(t, run(context.Background(), cfg, st, s, day("2026-10-11")))
+	if len(s.sent) == 0 {
+		t.Error("nothing sent with the check off")
+	}
+}

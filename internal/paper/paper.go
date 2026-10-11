@@ -191,9 +191,9 @@ func run(db *sql.DB, cfg config.Config, now time.Time) error {
 func strategyFor(name string, cfg config.Config, db *sql.DB) (strategy, error) {
 	switch name {
 	case "revenue_momentum":
-		return momentum{cfg.Strategy.RevenueMomentum, db}, nil
+		return momentum{cfg.Strategy.RevenueMomentum, db, cfg.Revenue.MinCoverage}, nil
 	case "cycle_bottom":
-		return cycle{cfg.Strategy.CycleBottom, db}, nil
+		return cycle{cfg.Strategy.CycleBottom, db, cfg.Revenue.MinCoverage}, nil
 	}
 	return nil, fmt.Errorf("unknown strategy %q (want revenue_momentum or cycle_bottom)", name)
 }

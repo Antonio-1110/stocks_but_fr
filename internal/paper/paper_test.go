@@ -1,8 +1,12 @@
 package paper
 
 import (
+	"bytes"
+	"log"
 	"math"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,5 +186,40 @@ func TestCycleEntryAndExit(t *testing.T) {
 	}
 	if !falling([]float64{10, 8, 3}, 2) || falling([]float64{10, 12, 3}, 2) {
 		t.Error("falling wrong")
+	}
+}
+
+func TestMomentumRebalanceWaitsForRevenueCoverage(t *testing.T) {
+	st := openStore(t)
+	cfg := config.Default()
+	tw := model.MarketTW
+	var cos []model.Company
+	var rows []model.Price
+	for _, tk := range []string{"1101", "1102", "1103", "1104"} {
+		cos = append(cos, model.Company{Market: tw, Ticker: tk, Name: tk})
+		for _, d := range []string{"2026-10-08", "2026-10-12", "2026-10-13"} {
+			rows = append(rows, price(tk, d, 10, 10, 10))
+		}
+	}
+	must(t, st.UpsertCompanies(cos))
+	must(t, st.UpsertPrices(rows))
+	// Only 1101 has September revenue: 25% of the market.
+	must(t, st.UpsertMonthlyRevenue([]model.MonthlyRevenue{{Market: tw, Ticker: "1101",
+		Month: day("2026-09-01"), Revenue: 1e9, YoYPct: 50, AnnouncedOn: day("2026-10-10")}}))
+
+	m, err := loadMarket(st.DB, 60, "", cfg.Paper.MinCoverage)
+	must(t, err)
+	s := momentum{cfg.Strategy.RevenueMomentum, st.DB, cfg.Revenue.MinCoverage}
+	b := &book{Cash: 1e6, pos: map[string]*position{}, blocked: map[string]string{}}
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
+	orders, err := s.decide(m, b, mark(m, b, m.last()))
+	must(t, err)
+	if !strings.Contains(logged.String(), "revenue for 2026-09 covers 1 of 4") {
+		t.Errorf("log = %q, want the coverage check", logged.String())
+	}
+	if len(orders) != 0 || b.LastRebalance != "" {
+		t.Errorf("rebalanced on 25%% revenue coverage: %d orders, last rebalance %q", len(orders), b.LastRebalance)
 	}
 }
