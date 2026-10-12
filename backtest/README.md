@@ -42,6 +42,13 @@ summing to at most 1) to rebalance at the next open, or `None` to do nothing.
 - An open outside the day's low-high range (FinMind has many on TWSE stocks)
   is treated as missing, so that day fills at the close.
 
+## Baseline (issue #50)
+
+`baselines/revenue_momentum.md` is the reference result for revenue momentum,
+on a pinned data snapshot. `tests/test_baseline.py` reruns it and fails on drift
+(skipped unless `RADAR_BASELINE_DB` points to the snapshot). A change that moves
+the numbers on purpose records a new baseline instead.
+
 ## Checked against real data (issue #23)
 
 On FinMind data collected 2026-10-09, `buy_and_hold` on 0050 matched 0050's
