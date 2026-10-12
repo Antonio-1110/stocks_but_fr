@@ -27,7 +27,14 @@ env:
   TZ: Asia/Taipei
 
 jobs:
+  # Code that fails its tests never collects into the saved database (#43).
+  test:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   run:
+    needs: test
     runs-on: ubuntu-latest
     # Runs never overlap: two runs would race on the database asset.
     concurrency:

@@ -15,7 +15,13 @@ env:
   TZ: Asia/Taipei
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   render:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
