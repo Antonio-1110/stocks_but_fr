@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data health</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* Health-page-only rules; theme tokens come from static/style.css. */
+.nav { margin: 0 0 8px; font-size: .85rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0 0 4px; }
+.tile { border: 1px solid var(--panel-edge); padding: 8px 10px; min-width: 0; }
+.tile dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.tile dd { margin: 2px 0 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+.tile dd small { display: block; font-size: .72rem; color: var(--muted); }
+.ok { color: var(--down); }
+.bad { color: var(--up); }
+.warn { color: var(--yellow); }
+.health td.n { text-align: right; white-space: nowrap; }
+.health td.d { color: var(--muted); overflow-wrap: anywhere; }
+.health thead th { cursor: default; }
+/* The shared stylesheet turns tables into cards on phones; these are small, keep them tables. */
+@media (max-width: 720px) {
+  .health table { display: table; }
+  .health thead { display: table-header-group; position: static; padding: 0; }
+  .health tbody { display: table-row-group; }
+  .health thead tr, .health tbody tr { display: table-row; }
+  .health thead th { border: 0; border-bottom: 1px solid var(--line); padding: 4px; }
+  .health tbody td { padding: 4px; border-bottom: 1px solid var(--line); }
+  .health td.d { display: none; }
+  .health th.d { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<header>
+  <p class="sys">SYS://TW-RADAR/HEALTH <span class="blink">_</span></p>
+  <h1 data-text="Data health">Data health</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{with .Latest}} <span class="sep">//</span> <b>snapshot {{stamp .ID}}</b>{{end}}</p>
+  <p class="nav"><a href="index.html">&lt; back to companies</a></p>
+</header>
+
+<main>
+{{with .Latest}}
+<section class="panel health">
+  <h2><span class="idx">01</span> Latest snapshot</h2>
+  <dl class="tiles">
+    <div class="tile"><dt>Hard checks</dt><dd>{{if eq (failed .Hard) 0}}<span class="ok">all pass</span>{{else}}<span class="bad">{{failed .Hard}} failed</span>{{end}}<small>a failure stops the publish</small></dd></div>
+    <div class="tile"><dt>Soft checks</dt><dd>{{if eq (failed .Soft) 0}}<span class="ok">all clear</span>{{else}}<span class="warn">{{failed .Soft}} to look at</span>{{end}}<small>reported, not blocking</small></dd></div>
+    {{range .Coverage}}<div class="tile"><dt>Revenue {{.Month}}</dt><dd><span class="{{if ge .Share $.MinCoverage}}ok{{else}}warn{{end}}">{{pct .Share}}</span><small>{{num .Have}} of {{num .Listed}} listed · gate {{pct $.MinCoverage}}</small></dd></div>{{end}}
+    <div class="tile"><dt>Prices to</dt><dd>{{index .Latest "prices"}}<small>benchmark {{index .Latest "benchmark"}}</small></dd></div>
+    <div class="tile"><dt>Flows to</dt><dd>{{index .Latest "flows"}}</dd></div>
+    <div class="tile"><dt>Collected by</dt><dd>{{if .CodeSHA}}{{short .CodeSHA}}{{else}}–{{end}}<small>commit</small></dd></div>
+  </dl>
+</section>
+
+<section class="panel health">
+  <h2><span class="idx">02</span> Checks</h2>
+  <table>
+    <thead><tr><th>Check</th><th>Kind</th><th>Result</th><th class="d">Detail</th></tr></thead>
+    <tbody>
+    {{range .Hard}}<tr><td>{{.Name}}</td><td>hard</td><td class="n">{{if .OK}}<span class="ok">ok</span>{{else}}<span class="bad">{{num .Count}}</span>{{end}}</td><td class="d">{{.Detail}}</td></tr>
+    {{end}}{{range .Soft}}<tr><td>{{.Name}}</td><td>soft</td><td class="n">{{if .OK}}<span class="ok">ok</span>{{else}}<span class="warn">{{num .Count}}</span>{{end}}</td><td class="d">{{.Detail}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{else}}
+<section class="panel health">
+  <h2><span class="idx">01</span> No snapshot yet</h2>
+  <p class="muted">The next daily run validates the database and records its first snapshot here.</p>
+</section>
+{{end}}
+
+{{if .History}}
+<section class="panel health">
+  <h2><span class="idx">03</span> Recent snapshots</h2>
+  <p class="muted">A row count that stops growing during a backfill, or falls, shows up here first.</p>
+  <table>
+    <thead><tr><th>Snapshot</th><th>Prices</th><th>Revenue</th><th class="d">Flows</th><th>Coverage</th></tr></thead>
+    <tbody>
+    {{range .History}}<tr><td>{{stamp .ID}}</td><td class="n">{{num (index .Rows "prices")}}</td><td class="n">{{num (index .Rows "monthly_revenue")}}</td><td class="n d">{{num (index .Rows "institutional_flows")}}</td><td class="n">{{lastCov .}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+</main>
+</body>
+</html>

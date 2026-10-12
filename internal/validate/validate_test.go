@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,5 +147,30 @@ func TestSoftChecksDoNotBlock(t *testing.T) {
 	}
 	if counts["open outside the day's low-high range"] != 2 || counts["listed stocks with no revenue"] != 1 {
 		t.Errorf("soft checks %+v", m.Soft)
+	}
+}
+
+func TestHealthPage(t *testing.T) {
+	st, cfg := open(t)
+	dir := t.TempDir()
+	// Before any snapshot the page still renders.
+	if err := renderHealth(st.DB, cfg, dir, day); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(filepath.Join(dir, "health.html"))
+	if !strings.Contains(string(body), "No snapshot yet") {
+		t.Errorf("empty page: %s", body)
+	}
+	if err := Run(context.Background(), cfg, st); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderHealth(st.DB, cfg, dir, day); err != nil {
+		t.Fatal(err)
+	}
+	body, _ = os.ReadFile(filepath.Join(dir, "health.html"))
+	for _, want := range []string{"all pass", "Revenue 2026-09", "100%", "listed stocks with no revenue", "Recent snapshots"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("page lacks %q", want)
+		}
 	}
 }

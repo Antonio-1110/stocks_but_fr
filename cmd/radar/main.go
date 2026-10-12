@@ -43,6 +43,7 @@ var renderers = []step{
 	{"site", site.Render},
 	{"calendar", calendar.Render}, // after site: reuses its static/style.css
 	{"paper", paper.Render},       // after site: reuses its static/style.css
+	{"health", validate.Render},   // after site: reuses its static/style.css
 }
 
 func main() {
