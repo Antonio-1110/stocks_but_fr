@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS state.paper_blocked (
 `
 
 func migrate(db *sql.DB) error {
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + ledgerSchema); err != nil {
 		return err
 	}
 	return store.MoveToState(db, "paper_portfolios", "paper_positions", "paper_orders", "paper_equity", "paper_blocked")
@@ -134,6 +134,7 @@ type book struct {
 	orders                 []*order // pending ones, then new ones
 	blocked                map[string]string
 	isNew                  bool
+	benchNew               bool // the benchmark was bought this run
 }
 
 // strategy turns the close of m.last() into orders.
@@ -234,7 +235,14 @@ func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now
 		b.LastSignal = m.last()
 	}
 
-	return save(db, b, equityRow(m, b, costs))
+	if err := save(db, b, equityRow(m, b, costs)); err != nil {
+		return err
+	}
+	// The book is saved either way; a mismatch means a bug to look at.
+	if err := reconcile(db, name); err != nil {
+		log.Printf("paper: %s: %v", name, err)
+	}
+	return nil
 }
 
 // fill executes pending orders whose next trading day is in the window, in
@@ -346,6 +354,7 @@ func fillBench(m *market, b *book, costs config.TWCosts) {
 			value = b.Capital - costs.Commission(value)
 		}
 		b.BenchDate, b.BenchShares, b.BenchCost = d, value/px.open, b.Capital
+		b.benchNew = true
 		return
 	}
 }
@@ -501,6 +510,9 @@ func save(db *sql.DB, b *book, e equity) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := backfillLedger(tx, b); err != nil {
+		return fmt.Errorf("ledger: %w", err)
+	}
 	if _, err := tx.Exec(`INSERT OR REPLACE INTO paper_portfolios (name, started_on, initial_capital,
 		cash, last_signal, last_rebalance, bench_ticker, bench_date, bench_shares, bench_cost)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, b.Name, b.StartedOn, b.Capital, b.Cash, b.LastSignal,
@@ -522,10 +534,14 @@ func save(db *sql.DB, b *book, e equity) error {
 		}
 		args := []any{o.Status, o.FillDate, o.Price, o.Shares, o.Value, o.Commission, o.Tax, o.PnL, o.Note}
 		if o.ID == 0 {
-			_, err = tx.Exec(`INSERT INTO paper_orders (portfolio, ticker, side, reason, signal_date, target,
+			var res sql.Result
+			res, err = tx.Exec(`INSERT INTO paper_orders (portfolio, ticker, side, reason, signal_date, target,
 				status, fill_date, price, shares, value, commission, tax, pnl, note)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				append([]any{b.Name, o.Ticker, o.Side, o.Reason, o.SignalDate, o.Target}, args...)...)
+			if err == nil {
+				o.ID, err = res.LastInsertId()
+			}
 		} else {
 			_, err = tx.Exec(`UPDATE paper_orders SET status = ?, fill_date = ?, price = ?, shares = ?,
 				value = ?, commission = ?, tax = ?, pnl = ?, note = ? WHERE id = ?`, append(args, o.ID)...)
@@ -542,6 +558,9 @@ func save(db *sql.DB, b *book, e equity) error {
 			b.Name, t, mo); err != nil {
 			return err
 		}
+	}
+	if err := writeLedger(tx, b); err != nil {
+		return fmt.Errorf("ledger: %w", err)
 	}
 	if e.date >= b.StartedOn {
 		if _, err := tx.Exec(`INSERT OR REPLACE INTO paper_equity (portfolio, date, cash, holdings, liquidation, bench)

@@ -2,6 +2,7 @@ package paper
 
 import (
 	"bytes"
+	"database/sql"
 	"log"
 	"math"
 	"os"
@@ -62,6 +63,58 @@ func runOnce(t *testing.T, st *store.Store, cfg config.Config, s strategy) {
 	m, err := loadMarket(st.DB, 60, "", cfg.Paper.MinCoverage)
 	must(t, err)
 	must(t, step(st.DB, cfg, m, "test", s, time.Now()))
+	// Whatever happened, the ledger replays to the saved book (issue #48).
+	var n int
+	must(t, st.DB.QueryRow(`SELECT COUNT(*) FROM paper_portfolios WHERE name = 'test'`).Scan(&n))
+	if n > 0 {
+		must(t, reconcile(st.DB, "test"))
+	}
+}
+
+func ledgerKinds(t *testing.T, st *store.Store) string {
+	t.Helper()
+	var kinds sql.NullString
+	must(t, st.DB.QueryRow(`SELECT group_concat(kind || CASE side WHEN '' THEN '' ELSE ':' || side END, ' ')
+		FROM (SELECT kind, side FROM paper_ledger ORDER BY id)`).Scan(&kinds))
+	return kinds.String
+}
+
+func TestLedgerIsAppendOnlyAndBackfills(t *testing.T) {
+	st := openStore(t)
+	cfg := config.Default()
+	cfg.Paper.InitialCapital = 1_000_000
+	s := script{
+		"2026-10-01": {{Ticker: "1111", Side: "buy", Target: 500_000, Reason: "test"}},
+		"2026-10-02": {{Ticker: "1111", Side: "sell", Reason: "test"}},
+	}
+	must(t, st.UpsertPrices([]model.Price{price("1111", "2026-10-01", 99, 100, 100), price("0050", "2026-10-01", 50, 50, 50)}))
+	runOnce(t, st, cfg, s)
+	must(t, st.UpsertPrices([]model.Price{price("1111", "2026-10-02", 100, 101, 101), price("0050", "2026-10-02", 50, 50, 50)}))
+	runOnce(t, st, cfg, s)
+	if got, want := ledgerKinds(t, st), "start order:buy bench:buy fill:buy order:sell"; got != want {
+		t.Fatalf("ledger %q, want %q", got, want)
+	}
+	if _, err := st.DB.Exec(`UPDATE paper_ledger SET cash_change = 0`); err == nil {
+		t.Error("ledger accepted an UPDATE")
+	}
+	if _, err := st.DB.Exec(`DELETE FROM paper_ledger`); err == nil {
+		t.Error("ledger accepted a DELETE")
+	}
+
+	// A portfolio from before the ledger: its start and past fills are
+	// backfilled once, ahead of this run's sell.
+	must(t, exec(st, `DROP TABLE paper_ledger`))
+	must(t, migrate(st.DB))
+	must(t, st.UpsertPrices([]model.Price{price("1111", "2026-10-05", 102, 102, 102), price("0050", "2026-10-05", 50, 50, 50)}))
+	runOnce(t, st, cfg, s)
+	if got, want := ledgerKinds(t, st), "start fill:buy fill:sell"; got != want {
+		t.Fatalf("after backfill ledger %q, want %q", got, want)
+	}
+}
+
+func exec(st *store.Store, q string) error {
+	_, err := st.DB.Exec(q)
+	return err
 }
 
 func TestFillsAtNextOpenWithCostsAndDividends(t *testing.T) {
