@@ -1,6 +1,7 @@
 package store
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -49,5 +50,49 @@ func TestOpenMigratesAndRoundTrips(t *testing.T) {
 	}
 	if none, _ := s.LatestPriceDate("TW", "0000"); !none.IsZero() {
 		t.Errorf("unknown ticker should have zero date, got %v", none)
+	}
+}
+
+// The state database is attached on every connection, and MoveToState moves
+// tables an older version kept in the main file (issue #46).
+func TestStateAttachedAndMoved(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "radar.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	// An old main-database table with rows, then the new state table.
+	for _, q := range []string{
+		`CREATE TABLE main.things (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`,
+		`INSERT INTO main.things VALUES (1, 'a'), (2, 'b')`,
+		`CREATE TABLE IF NOT EXISTS state.things (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`,
+		`INSERT INTO state.things VALUES (2, 'kept')`,
+	} {
+		if _, err := st.DB.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := MoveToState(st.DB, "things"); err != nil {
+		t.Fatal(err)
+	}
+	if err := MoveToState(st.DB, "things"); err != nil { // nothing left to move
+		t.Fatal(err)
+	}
+	// Many connections at once all see the attached table, unqualified.
+	st.DB.SetMaxIdleConns(0)
+	for i := 0; i < 3; i++ {
+		var got string
+		if err := st.DB.QueryRow(`SELECT group_concat(name, ',') FROM (SELECT name FROM things ORDER BY id)`).Scan(&got); err != nil || got != "a,kept" {
+			t.Fatalf("things = %q, %v; want a,kept", got, err)
+		}
+	}
+	var n int
+	st.DB.QueryRow(`SELECT COUNT(*) FROM main.sqlite_master WHERE name = 'things'`).Scan(&n)
+	if n != 0 {
+		t.Error("main.things not dropped")
+	}
+	if _, err := os.Stat(filepath.Join(dir, StateFile)); err != nil {
+		t.Errorf("state file: %v", err)
 	}
 }

@@ -36,9 +36,10 @@ const dateLayout = "2006-01-02"
 // at its last close (delisted, or suspended for good).
 const staleDays = 20
 
-// Owned by this package, not internal/store: nothing else writes them.
+// Owned by this package, not internal/store: nothing else writes them. They
+// live in the state database (store.StateFile, issue #46).
 const schema = `
-CREATE TABLE IF NOT EXISTS paper_portfolios (
+CREATE TABLE IF NOT EXISTS state.paper_portfolios (
 	name            TEXT PRIMARY KEY,
 	started_on      TEXT NOT NULL,              -- price date of its first signal
 	initial_capital REAL NOT NULL,
@@ -50,7 +51,7 @@ CREATE TABLE IF NOT EXISTS paper_portfolios (
 	bench_shares    REAL NOT NULL DEFAULT 0,    -- as of bench_date
 	bench_cost      REAL NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS paper_positions (
+CREATE TABLE IF NOT EXISTS state.paper_positions (
 	portfolio TEXT NOT NULL,
 	ticker    TEXT NOT NULL,
 	opened    TEXT NOT NULL,   -- fill day; shares are as of this day
@@ -59,7 +60,7 @@ CREATE TABLE IF NOT EXISTS paper_positions (
 	gross     REAL NOT NULL,   -- NTD bought before commission (stop-loss reference)
 	PRIMARY KEY (portfolio, ticker)
 );
-CREATE TABLE IF NOT EXISTS paper_orders (
+CREATE TABLE IF NOT EXISTS state.paper_orders (
 	id          INTEGER PRIMARY KEY,
 	portfolio   TEXT NOT NULL,
 	ticker      TEXT NOT NULL,
@@ -77,7 +78,7 @@ CREATE TABLE IF NOT EXISTS paper_orders (
 	pnl         REAL NOT NULL DEFAULT 0,    -- sells: after-cost proceeds minus cost
 	note        TEXT NOT NULL DEFAULT ''
 );
-CREATE TABLE IF NOT EXISTS paper_equity (
+CREATE TABLE IF NOT EXISTS state.paper_equity (
 	portfolio   TEXT NOT NULL,
 	date        TEXT NOT NULL,
 	cash        REAL NOT NULL,
@@ -86,7 +87,7 @@ CREATE TABLE IF NOT EXISTS paper_equity (
 	bench       REAL,            -- benchmark the same way; NULL before it is bought
 	PRIMARY KEY (portfolio, date)
 );
-CREATE TABLE IF NOT EXISTS paper_blocked (
+CREATE TABLE IF NOT EXISTS state.paper_blocked (
 	portfolio TEXT NOT NULL,
 	ticker    TEXT NOT NULL,
 	month     TEXT NOT NULL,     -- may not be bought again until revenue newer than this is out
@@ -95,8 +96,10 @@ CREATE TABLE IF NOT EXISTS paper_blocked (
 `
 
 func migrate(db *sql.DB) error {
-	_, err := db.Exec(schema)
-	return err
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	return store.MoveToState(db, "paper_portfolios", "paper_positions", "paper_orders", "paper_equity", "paper_blocked")
 }
 
 type position struct {

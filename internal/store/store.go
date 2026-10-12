@@ -3,13 +3,17 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
 )
@@ -62,15 +66,24 @@ type Store struct {
 	DB *sql.DB
 }
 
-// Open creates the file and its directory if needed and applies the schema.
+// StateFile is the state database kept next to the market database (issue
+// #46): paper portfolios and alert state, which must not roll back with
+// market data and are saved separately. Every connection attaches it as
+// schema "state"; packages create their tables as state.<name>, and queries
+// can name them unqualified.
+const StateFile = "state.db"
+
+// Open creates the file and its directory if needed, attaches the state
+// database, and applies the schema.
 func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	base, err := sqlite.NewConnector(path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
+	db := sql.OpenDB(attach{base, filepath.Join(filepath.Dir(path), StateFile)})
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate %s: %w", path, err)
@@ -79,6 +92,87 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.DB.Close() }
+
+// attach opens connections with the state database attached.
+type attach struct {
+	driver.Connector
+	state string
+}
+
+func (a attach) Connect(ctx context.Context) (driver.Conn, error) {
+	conn, err := a.Connector.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ex, ok := conn.(driver.ExecerContext)
+	if !ok {
+		conn.Close()
+		return nil, errors.New("store: sqlite connection cannot exec")
+	}
+	steps := []struct {
+		q    string
+		args []driver.NamedValue
+	}{
+		{`ATTACH DATABASE ? AS state`, []driver.NamedValue{{Ordinal: 1, Value: a.state}}},
+		{`PRAGMA state.journal_mode = WAL`, nil},
+	}
+	for _, s := range steps {
+		if _, err := ex.ExecContext(ctx, s.q, s.args); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("attach %s: %w", a.state, err)
+		}
+	}
+	return conn, nil
+}
+
+// MoveToState moves tables an older version kept in the main database into
+// the state database, which must already have them (same columns). Rows
+// already in state win. It does nothing once the main copies are gone.
+func MoveToState(db *sql.DB, tables ...string) error {
+	for _, t := range tables {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM main.sqlite_master WHERE type = 'table' AND name = ?`, t).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			continue
+		}
+		rows, err := db.Query(`SELECT name FROM pragma_table_info(?, 'main')`, t)
+		if err != nil {
+			return err
+		}
+		var cols []string
+		for rows.Next() {
+			var c string
+			if err := rows.Scan(&c); err != nil {
+				rows.Close()
+				return err
+			}
+			cols = append(cols, `"`+c+`"`)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		list := strings.Join(cols, ", ")
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`INSERT OR IGNORE INTO state."%s" (%s) SELECT %s FROM main."%s"`, t, list, list, t)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("move %s to state: %w", t, err)
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`DROP TABLE main."%s"`, t)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func fmtDate(t time.Time) string {
 	if t.IsZero() {

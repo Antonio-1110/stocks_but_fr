@@ -26,15 +26,16 @@ var taipei = time.FixedZone("Asia/Taipei", 8*60*60)
 
 const dateLayout = "2006-01-02"
 
-// Owned by this package, not internal/store: nothing else reads it.
+// Owned by this package, not internal/store: nothing else reads it. It lives
+// in the state database (store.StateFile, issue #46).
 const schema = `
-CREATE TABLE IF NOT EXISTS alert_state (
+CREATE TABLE IF NOT EXISTS state.alert_state (
 	rule   TEXT NOT NULL,
 	ticker TEXT NOT NULL,
 	since  TEXT NOT NULL,
 	PRIMARY KEY (rule, ticker)
 );
-CREATE TABLE IF NOT EXISTS alert_rules (
+CREATE TABLE IF NOT EXISTS state.alert_rules (
 	rule       TEXT PRIMARY KEY,
 	seeded_on  TEXT NOT NULL
 );
@@ -71,6 +72,9 @@ func Run(ctx context.Context, cfg config.Config, st *store.Store) error {
 
 func run(ctx context.Context, cfg config.Config, st *store.Store, s sender, now time.Time) error {
 	if _, err := st.DB.Exec(schema); err != nil {
+		return fmt.Errorf("alert tables: %w", err)
+	}
+	if err := store.MoveToState(st.DB, "alert_state", "alert_rules"); err != nil {
 		return fmt.Errorf("alert tables: %w", err)
 	}
 	var failed []string

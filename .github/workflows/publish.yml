@@ -61,6 +61,16 @@ jobs:
           done
           echo "Release '$DATA_TAG' has no database asset; rendering an empty site"
 
+      # Paper portfolios live in state.db (#46). Without it the paper page
+      # renders empty; nothing here is saved back, so that is harmless.
+      - name: Download state
+        run: |
+          if gh release download "$DATA_TAG" --pattern state.db.gz --output data/state.db.gz 2>/dev/null; then
+            gunzip data/state.db.gz
+          else
+            echo "No state.db.gz on the release yet"
+          fi
+
       - name: Render
         run: ./radar render
 

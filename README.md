@@ -39,6 +39,12 @@ counts, latest dates, revenue coverage, commit, soft-check results) in the
 database's `snapshots` table and as `manifest.json` on the release. Backtest
 reports name the snapshot and commit they ran on.
 
+Paper portfolios and alert state are kept apart in `data/state.db` (the
+`state.db.gz` asset, with `state.prev.db.gz` one run back), so rolling back
+market data never rewinds them. `radar` attaches it automatically. If
+`state.db.gz` goes missing the run stops rather than restarting the
+portfolios; rename `state.prev.db.gz` to restore it.
+
 ## Calendar
 
 `public/calendar.html` (linked from the dashboard) marks 法說會, ex-dividend
