@@ -49,7 +49,7 @@ var renderers = []step{
 func main() {
 	configPath := flag.String("config", "radar.toml", "path to the config file")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render")
+		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render|notify")
 	}
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -67,6 +67,9 @@ func main() {
 		// Unlike collect and render, a failure here must stop the run so
 		// nothing is published (issue #44).
 		steps = []step{{"validate", validate.Run}}
+	case "notify":
+		// Sends the alerts collect queued; run it after the state is saved.
+		steps = []step{{"notify", alerts.Notify}}
 	default:
 		flag.Usage()
 		os.Exit(2)

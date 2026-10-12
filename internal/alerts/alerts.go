@@ -39,6 +39,16 @@ CREATE TABLE IF NOT EXISTS state.alert_rules (
 	rule       TEXT PRIMARY KEY,
 	seeded_on  TEXT NOT NULL
 );
+-- Append-only: rows are added by collect and only ever get sent_at/sent_via
+-- set, once, by notify (issue #47).
+CREATE TABLE IF NOT EXISTS state.alert_outbox (
+	id         INTEGER PRIMARY KEY,
+	rule       TEXT NOT NULL,
+	created_at TEXT NOT NULL,             -- RFC 3339
+	body       TEXT NOT NULL,             -- Telegram HTML
+	sent_at    TEXT NOT NULL DEFAULT '',  -- '' until handled
+	sent_via   TEXT NOT NULL DEFAULT ''   -- telegram | log | expired
+);
 `
 
 // Hit is one stock passing a rule, in rank order.
@@ -59,18 +69,13 @@ type sender interface {
 	Send(ctx context.Context, html string) error
 }
 
-// Run is the `alerts` collect step.
+// Run is the `alerts` collect step. It queues messages in alert_outbox;
+// `radar notify` sends them once the state is saved (issue #47).
 func Run(ctx context.Context, cfg config.Config, st *store.Store) error {
-	var s sender
-	if t := telegramFromEnv(); t != nil {
-		s = t
-	} else {
-		log.Printf("alerts: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set; logging alerts instead of sending")
-	}
-	return run(ctx, cfg, st, s, time.Now().In(taipei))
+	return run(ctx, cfg, st, time.Now().In(taipei))
 }
 
-func run(ctx context.Context, cfg config.Config, st *store.Store, s sender, now time.Time) error {
+func run(ctx context.Context, cfg config.Config, st *store.Store, now time.Time) error {
 	if _, err := st.DB.Exec(schema); err != nil {
 		return fmt.Errorf("alert tables: %w", err)
 	}
@@ -81,7 +86,7 @@ func run(ctx context.Context, cfg config.Config, st *store.Store, s sender, now 
 	for _, name := range cfg.Alerts.Rules {
 		r, err := ruleFor(name, cfg, st)
 		if err == nil {
-			err = check(ctx, st.DB, r, s, now)
+			err = check(st.DB, r, now)
 		}
 		if err != nil {
 			log.Printf("alerts: %s: %v", name, err)
@@ -122,9 +127,9 @@ func ruleFor(name string, cfg config.Config, st *store.Store) (rule, error) {
 	return rule{}, fmt.Errorf("unknown rule %q (want revenue_momentum or unpriced)", name)
 }
 
-// check ranks one rule, sends the stocks that newly entered it, and saves
-// what is on. A failed send saves nothing, so the next run tries again.
-func check(ctx context.Context, db *sql.DB, r rule, s sender, now time.Time) error {
+// check ranks one rule, queues messages for the stocks that newly entered
+// it, and saves what is on, all in one transaction.
+func check(db *sql.DB, r rule, now time.Time) error {
 	hits, asOf, err := r.rank(now)
 	if err != nil {
 		return err
@@ -143,32 +148,20 @@ func check(ctx context.Context, db *sql.DB, r rule, s sender, now time.Time) err
 
 	var seeded sql.NullString
 	db.QueryRow(`SELECT seeded_on FROM alert_rules WHERE rule = ?`, r.name).Scan(&seeded)
+	var msgs []string
 	switch {
 	case !seeded.Valid:
 		// Only a hello, so the owner sees the setup works without a flood.
 		log.Printf("alerts: %s: first run, recording %d stocks without alerting", r.name, len(on))
-		if s != nil {
-			msg := fmt.Sprintf("<b>%s</b> alerts are on. %d stocks pass now; you'll get a message when a new one enters the top %d.",
-				html.EscapeString(r.title), len(on), r.enter)
-			if err := s.Send(ctx, msg); err != nil {
-				return fmt.Errorf("send: %w", err)
-			}
-		}
+		msgs = []string{fmt.Sprintf("<b>%s</b> alerts are on. %d stocks pass now; you'll get a message when a new one enters the top %d.",
+			html.EscapeString(r.title), len(on), r.enter)}
 	case len(entered) == 0:
 		log.Printf("alerts: %s: no new stocks (%d on)", r.name, len(on))
 	default:
-		for _, msg := range format(r, entered, asOf) {
-			if s == nil {
-				log.Printf("alerts: %s: would send:\n%s", r.name, msg)
-				continue
-			}
-			if err := s.Send(ctx, msg); err != nil {
-				return fmt.Errorf("send: %w", err)
-			}
-		}
-		log.Printf("alerts: %s: %d new", r.name, len(entered))
+		msgs = format(r, entered, asOf)
+		log.Printf("alerts: %s: %d new, %d messages queued", r.name, len(entered), len(msgs))
 	}
-	return saveOn(db, r.name, prev, on, now)
+	return saveOn(db, r.name, prev, on, now, msgs)
 }
 
 // diff walks the ranking: a stock already on stays while it ranks within
@@ -205,7 +198,7 @@ func loadOn(db *sql.DB, rule string) (map[string]string, error) {
 	return out, q.Err()
 }
 
-func saveOn(db *sql.DB, rule string, prev map[string]string, on []string, now time.Time) error {
+func saveOn(db *sql.DB, rule string, prev map[string]string, on []string, now time.Time, msgs []string) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -226,6 +219,12 @@ func saveOn(db *sql.DB, rule string, prev map[string]string, on []string, now ti
 	}
 	if _, err := tx.Exec(`INSERT OR IGNORE INTO alert_rules (rule, seeded_on) VALUES (?, ?)`, rule, today); err != nil {
 		return err
+	}
+	for _, m := range msgs {
+		if _, err := tx.Exec(`INSERT INTO alert_outbox (rule, created_at, body) VALUES (?, ?, ?)`,
+			rule, now.UTC().Format(time.RFC3339), m); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

@@ -16,6 +16,7 @@ services:
       - |
         while true; do
           radar collect
+          radar notify   # Telegram alerts queued by collect; the DB is on disk already
           radar render
           echo "sleeping $${RADAR_INTERVAL_SECONDS}s until the next run"
           sleep "$${RADAR_INTERVAL_SECONDS}"

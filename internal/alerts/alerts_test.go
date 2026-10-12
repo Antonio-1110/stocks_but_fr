@@ -76,7 +76,8 @@ func TestCheckSendsOnlyNewEntriesWithHysteresis(t *testing.T) {
 		t.Helper()
 		ranking = hits(tickers...)
 		s.sent = nil
-		must(t, check(ctx, st.DB, r, s, now))
+		must(t, check(st.DB, r, now))
+		must(t, notify(ctx, st.DB, s, now))
 		return s.sent
 	}
 
@@ -105,15 +106,47 @@ func TestCheckSendsOnlyNewEntriesWithHysteresis(t *testing.T) {
 	if on, _ := loadOn(st.DB, "test"); len(on) != 3 {
 		t.Fatalf("state after empty ranking: %v", on)
 	}
-	// A failed send saves nothing, so the next run retries.
+	// A failed send keeps the message queued; the next notify sends it once,
+	// and the ranking is not re-alerted.
 	ranking = hits("E", "A", "B")
-	s.err = errors.New("down")
-	if err := check(ctx, st.DB, r, s, now); err == nil {
+	must(t, check(st.DB, r, now))
+	s.err, s.sent = errors.New("down"), nil
+	if err := notify(ctx, st.DB, s, now); err == nil {
 		t.Fatal("want send error")
 	}
 	s.err = nil
-	if sent := step("E", "A", "B"); len(sent) != 1 || !strings.Contains(sent[0], "E NE") {
-		t.Fatalf("want E retried, got %q", sent)
+	must(t, notify(ctx, st.DB, s, now))
+	if len(s.sent) != 1 || !strings.Contains(s.sent[0], "E NE") {
+		t.Fatalf("want E sent after the retry, got %q", s.sent)
+	}
+	if sent := step("E", "A", "B"); len(sent) != 0 {
+		t.Fatalf("E sent twice: %q", sent)
+	}
+}
+
+// Nothing is sent while collecting; a message older than maxAge is dropped
+// instead of sent late (issue #47).
+func TestOutboxSendsOnlyOnNotifyAndExpires(t *testing.T) {
+	st := openStore(t)
+	ctx := context.Background()
+	now := day("2026-10-11")
+	r := rule{name: "test", title: "Test", enter: 1, exit: 1,
+		rank: func(time.Time) ([]Hit, string, error) { return hits("A"), "", nil }}
+	must(t, check(st.DB, r, now))
+	var queuedN int
+	st.DB.QueryRow(`SELECT COUNT(*) FROM state.alert_outbox WHERE sent_at = ''`).Scan(&queuedN)
+	if queuedN != 1 {
+		t.Fatalf("queued %d, want the hello", queuedN)
+	}
+	s := &fakeSender{}
+	must(t, notify(ctx, st.DB, s, now.Add(maxAge+time.Hour)))
+	if len(s.sent) != 0 {
+		t.Fatalf("sent a stale message: %q", s.sent)
+	}
+	var via string
+	st.DB.QueryRow(`SELECT sent_via FROM alert_outbox`).Scan(&via)
+	if via != "expired" {
+		t.Errorf("sent_via = %q, want expired", via)
 	}
 }
 
@@ -121,8 +154,14 @@ func TestCheckWithoutTelegramStillRecords(t *testing.T) {
 	st := openStore(t)
 	r := rule{name: "test", enter: 1, exit: 1,
 		rank: func(time.Time) ([]Hit, string, error) { return hits("A"), "", nil }}
-	must(t, check(context.Background(), st.DB, r, nil, day("2026-10-11")))
-	must(t, check(context.Background(), st.DB, r, nil, day("2026-10-11")))
+	must(t, check(st.DB, r, day("2026-10-11")))
+	must(t, check(st.DB, r, day("2026-10-11")))
+	must(t, notify(context.Background(), st.DB, nil, day("2026-10-11")))
+	var via string
+	st.DB.QueryRow(`SELECT group_concat(sent_via) FROM alert_outbox`).Scan(&via)
+	if via != "log" {
+		t.Errorf("sent_via = %q, want one logged hello", via)
+	}
 	if on, _ := loadOn(st.DB, "test"); on["A"] != "2026-10-11" {
 		t.Fatalf("state %v", on)
 	}
@@ -201,8 +240,9 @@ func TestRunEndToEnd(t *testing.T) {
 	cfg.Strategy.RevenueMomentum.HighDays, cfg.Strategy.RevenueMomentum.ADVDays = 20, 5
 	cfg.Alerts.Rules = []string{"revenue_momentum", "unpriced"}
 	s := &fakeSender{}
-	must(t, run(context.Background(), cfg, st, s, day("2026-10-10")))
-	must(t, run(context.Background(), cfg, st, s, day("2026-10-11")))
+	must(t, run(context.Background(), cfg, st, day("2026-10-10")))
+	must(t, run(context.Background(), cfg, st, day("2026-10-11")))
+	must(t, notify(context.Background(), st.DB, s, day("2026-10-11")))
 	// 2330 enters revenue momentum once September revenue is out; 1101 was already on.
 	var momentum []string
 	for _, m := range s.sent {
@@ -217,7 +257,7 @@ func TestRunEndToEnd(t *testing.T) {
 		t.Error("unpriced rule recorded nothing")
 	}
 	cfg.Alerts.Rules = []string{"nope"}
-	if err := run(context.Background(), cfg, st, s, day("2026-10-11")); err == nil {
+	if err := run(context.Background(), cfg, st, day("2026-10-11")); err == nil {
 		t.Fatal("unknown rule should fail")
 	}
 }
@@ -300,7 +340,8 @@ func TestRulesWaitForRevenueCoverage(t *testing.T) {
 	}
 
 	s := &fakeSender{}
-	must(t, run(context.Background(), cfg, st, s, day("2026-10-11")))
+	must(t, run(context.Background(), cfg, st, day("2026-10-11")))
+	must(t, notify(context.Background(), st.DB, s, day("2026-10-11")))
 	if len(s.sent) != 0 {
 		t.Fatalf("sent %q while revenue is incomplete", s.sent)
 	}
@@ -310,7 +351,8 @@ func TestRulesWaitForRevenueCoverage(t *testing.T) {
 		t.Errorf("rules seeded on incomplete revenue: %d", n)
 	}
 	cfg.Revenue.MinCoverage = 0 // the check off: ranks as before
-	must(t, run(context.Background(), cfg, st, s, day("2026-10-11")))
+	must(t, run(context.Background(), cfg, st, day("2026-10-11")))
+	must(t, notify(context.Background(), st.DB, s, day("2026-10-11")))
 	if len(s.sent) == 0 {
 		t.Error("nothing sent with the check off")
 	}

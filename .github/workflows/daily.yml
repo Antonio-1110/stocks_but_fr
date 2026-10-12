@@ -109,12 +109,10 @@ jobs:
             echo "Starting with empty state"
           fi
 
+      # Alerts are only queued here; "Send alerts" sends them after saving.
       - name: Collect
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
-          # The last collect step sends Telegram alerts (internal/alerts).
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -o pipefail
           ./radar collect 2>&1 | tee collect.log
@@ -205,6 +203,38 @@ jobs:
               gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
             fi
           done <<<"$assets"
+
+      # Telegram goes out only now that the state with the queued alerts is
+      # saved, so a failed save can't lead to the same alert twice (#47).
+      # Then the state is saved again so the sent marks stick; that upload
+      # replaces state.db.gz and keeps state.prev.db.gz as it is.
+      - name: Send alerts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: ./radar notify
+
+      - name: Save state
+        run: |
+          python3 - <<'EOF'
+          import sqlite3
+          db = sqlite3.connect("data/state.db")
+          db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+          ok = db.execute("PRAGMA quick_check").fetchone()[0]
+          if ok != "ok":
+              raise SystemExit(f"state check failed: {ok}")
+          db.execute("PRAGMA journal_mode=DELETE")
+          db.close()
+          EOF
+          gzip -c data/state.db > "$STATE_ASSET.new"
+          gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
+          old=$(asset_id "$STATE_ASSET")
+          if [ -n "$old" ]; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$(asset_id "$STATE_ASSET.new")" -f name="$STATE_ASSET" >/dev/null
 
       # GitHub starts few of the hourly scheduled runs, so while a backfill is
       # incomplete each run starts the next one. The `daily` group keeps at
