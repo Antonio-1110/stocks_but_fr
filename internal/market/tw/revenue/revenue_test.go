@@ -111,7 +111,8 @@ func TestCollectEndToEnd(t *testing.T) {
 	err = st.UpsertCompanies([]model.Company{
 		{Market: model.MarketTW, Ticker: "0050", Name: "元大台灣50"}, // ETF: skipped
 		{Market: model.MarketTW, Ticker: "2330", Name: "台積電"},
-		{Market: model.MarketTW, Ticker: "9999", Name: "Gone Co", DelistedOn: month(2015, 1)},
+		{Market: model.MarketTW, Ticker: "1107", Name: "Long Gone", DelistedOn: month(2007, 10)}, // before start: never asked
+		{Market: model.MarketTW, Ticker: "9999", Name: "Gone Co", DelistedOn: month(2024, 1)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -149,8 +150,10 @@ func TestCollectEndToEnd(t *testing.T) {
 		t.Errorf("2024-02 yoy %+v", yoy)
 	}
 
-	// Second run: 2330 already holds last month (Feb 2024), so nothing is
-	// requested except 9999, which has no data yet and is answered from cache.
+	// Second run, on a fresh runner (no cache): 2330 already holds last month
+	// (Feb 2024), and 9999 is delisted and was fetched once with no data, so
+	// nothing is requested (issue #42: they used to be asked every run).
+	c.cacheDir = filepath.Join(dir, "cache2")
 	if err := c.run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -172,6 +175,49 @@ func TestCollectEndToEnd(t *testing.T) {
 	}
 	if stale == nil || !stale.storeFrom.Equal(month(2024, 2)) || !stale.from.Equal(month(2023, 3)) {
 		t.Fatalf("2330 target %+v", stale)
+	}
+}
+
+// A listed ticker FinMind has no revenue for is asked again only after
+// emptyRecheckDays, and listed tickers are fetched before delisted ones.
+func TestEmptyListedTickerRecheckedWeekly(t *testing.T) {
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.Query().Get("data_id"))
+		w.Write([]byte(`{"msg":"success","status":200,"data":[]}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "radar.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	st.UpsertCompanies([]model.Company{
+		{Market: model.MarketTW, Ticker: "1234", Name: "Gone", DelistedOn: month(2024, 1)},
+		{Market: model.MarketTW, Ticker: "5555", Name: "Listed"},
+	})
+	day := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)
+	run := func(now time.Time) {
+		t.Helper()
+		c := collector{st: st, finmind: &tw.FinMind{BaseURL: srv.URL, Budget: 10, HTTP: srv.Client()},
+			cacheDir: t.TempDir(), start: month(2023, 1), now: now}
+		if err := c.run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(day)
+	if strings.Join(asked, ",") != "5555,1234" {
+		t.Fatalf("first run asked %v, want listed 5555 before delisted 1234", asked)
+	}
+	run(day.AddDate(0, 0, 3))
+	if len(asked) != 2 {
+		t.Fatalf("within a week asked %v, want nothing new", asked)
+	}
+	run(day.AddDate(0, 0, emptyRecheckDays+1))
+	if strings.Join(asked, ",") != "5555,1234,5555" {
+		t.Fatalf("after a week asked %v, want 5555 again only", asked)
 	}
 }
 

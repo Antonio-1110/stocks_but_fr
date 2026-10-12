@@ -31,6 +31,21 @@ import (
 // the database holds.
 const cacheTTL = 20 * time.Hour
 
+// checksTable records when each ticker was last fetched and how many rows came
+// back. Without it a ticker FinMind has no revenue for (most companies
+// delisted before history_start) looks unfetched forever and is asked again
+// every run ahead of everything else (issue #42). It is this collector's
+// bookkeeping, not part of the shared schema.
+const checksTable = `CREATE TABLE IF NOT EXISTS tw_revenue_checks (
+	ticker     TEXT PRIMARY KEY,
+	checked_on TEXT NOT NULL,
+	rows       INTEGER NOT NULL
+)`
+
+// A listed ticker FinMind returned no revenue for is asked again after this
+// many days; a delisted one is not asked again.
+const emptyRecheckDays = 7
+
 // Collect is the `radar collect` step.
 func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
 	start, err := time.Parse("2006-01-02", cfg.Run.HistoryStart)
@@ -56,6 +71,9 @@ type collector struct {
 }
 
 func (c *collector) run(ctx context.Context) error {
+	if _, err := c.st.DB.Exec(checksTable); err != nil {
+		return err
+	}
 	todo, err := c.todo()
 	if err != nil {
 		return err
@@ -86,6 +104,10 @@ func (c *collector) run(ctx context.Context) error {
 		if err := c.st.UpsertMonthlyRevenue(recs); err != nil {
 			return err
 		}
+		if _, err := c.st.DB.Exec(`INSERT OR REPLACE INTO tw_revenue_checks (ticker, checked_on, rows) VALUES (?, ?, ?)`,
+			t.ticker, c.now.Format("2006-01-02"), len(recs)); err != nil {
+			return err
+		}
 		stored += len(recs)
 	}
 	log.Printf("tw-revenue: %d requests, %d failed, %d rows stored", fetched, failed, stored)
@@ -98,9 +120,12 @@ type target struct {
 	storeFrom time.Time // first revenue month to write
 }
 
-// todo lists the tickers to fetch, those with no revenue yet first. Tickers
-// already holding last month's figure, and delisted ones with any data, are
-// skipped. ETFs (tickers starting "00") report no revenue and are skipped too.
+// todo lists the tickers to fetch: listed ones with no revenue yet first, then
+// delisted ones with none, then stale ones. Tickers already holding last
+// month's figure, and delisted ones with any data, are skipped, as are ETFs
+// (tickers starting "00", which report no revenue), companies delisted before
+// the first month stored, delisted tickers already fetched once, and listed
+// ones that came back empty in the last emptyRecheckDays.
 func (c *collector) todo() ([]target, error) {
 	companies, err := c.st.Companies(model.MarketTW)
 	if err != nil {
@@ -110,21 +135,34 @@ func (c *collector) todo() ([]target, error) {
 	if err != nil {
 		return nil, err
 	}
+	checks, err := loadChecks(c.st.DB)
+	if err != nil {
+		return nil, err
+	}
+	recheck := c.now.AddDate(0, 0, -emptyRecheckDays).Format("2006-01-02")
 	lastMonth := firstOfMonth(c.now).AddDate(0, -1, 0)
 	// YoY needs the 12 months before the first stored month. FinMind dates
 	// are one month after the revenue month, hence -11 rather than -12.
 	start := firstOfMonth(c.start)
 
-	var fresh, stale []target
+	var fresh, gone, stale []target
 	for _, co := range companies {
 		if strings.HasPrefix(co.Ticker, "00") {
 			continue
 		}
 		have, ok := latest[co.Ticker]
+		delisted := !co.DelistedOn.IsZero()
+		checked, wasChecked := checks[co.Ticker]
 		switch {
+		case !ok && delisted && (co.DelistedOn.Before(start) || wasChecked):
+			continue
+		case !ok && delisted:
+			gone = append(gone, target{co.Ticker, start.AddDate(0, -11, 0), start})
+		case !ok && wasChecked && checked > recheck:
+			continue
 		case !ok:
 			fresh = append(fresh, target{co.Ticker, start.AddDate(0, -11, 0), start})
-		case !co.DelistedOn.IsZero(), !have.Before(lastMonth):
+		case delisted, !have.Before(lastMonth):
 			continue
 		default:
 			// Rewrite from the newest stored month (it may have been revised)
@@ -133,7 +171,24 @@ func (c *collector) todo() ([]target, error) {
 		}
 	}
 	sort.SliceStable(stale, func(i, j int) bool { return stale[i].from.Before(stale[j].from) })
-	return append(fresh, stale...), nil
+	return append(append(fresh, gone...), stale...), nil
+}
+
+func loadChecks(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query(`SELECT ticker, checked_on FROM tw_revenue_checks`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var t, d string
+		if err := rows.Scan(&t, &d); err != nil {
+			return nil, err
+		}
+		out[t] = d
+	}
+	return out, rows.Err()
 }
 
 func latestMonths(db *sql.DB) (map[string]time.Time, error) {
