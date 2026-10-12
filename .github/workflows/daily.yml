@@ -73,8 +73,10 @@ jobs:
             echo "$assets"
             exit 1
           fi
-          # .new is left behind only if a previous save stopped halfway.
-          for name in "$DB_ASSET" "$DB_ASSET.new"; do
+          # .new is left behind only if a previous save stopped halfway. It
+          # was uploaded after validation passed, so it is the newest good
+          # copy (#49).
+          for name in "$DB_ASSET.new" "$DB_ASSET"; do
             if grep -qxF "$name" <<<"$assets"; then
               gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz
               gunzip data/radar.db.gz
@@ -92,7 +94,7 @@ jobs:
       - name: Restore state
         run: |
           assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[].name' 2>/dev/null || true)
-          for name in "$STATE_ASSET" "$STATE_ASSET.new"; do
+          for name in "$STATE_ASSET.new" "$STATE_ASSET"; do
             if grep -qxF "$name" <<<"$assets"; then
               gh release download "$DATA_TAG" --pattern "$name" --output data/state.db.gz
               gunzip data/state.db.gz
@@ -149,6 +151,10 @@ jobs:
           db.execute("PRAGMA journal_mode=DELETE")
           db.close()
           EOF
+          # GitHub answers the odd release call with a 5xx; retry (#49).
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
+          # A DELETE that errored but went through leaves nothing to retry.
+          del_asset() { retry gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$1" || ! gh api "repos/$GITHUB_REPOSITORY/releases/assets/$1" >/dev/null 2>&1; }
           gzip -c data/state.db > "$STATE_ASSET.new"
           gzip -c data/radar.db > "$DB_ASSET.new"
           ls -lh data/radar.db "$DB_ASSET.new"
@@ -157,36 +163,36 @@ jobs:
               --notes "Latest data/radar.db, replaced by the daily workflow. Not a software release."
           fi
           asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
-          rename() { gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$1" -f name="$2" >/dev/null; }
+          rename() { retry gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$1" -f name="$2" >/dev/null; }
           # State first (#46): if the run stops before the database swap, the
           # next run restores the older database with this state, which is
           # safe; the other way round could leave moved tables in neither.
-          gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
-          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          retry gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
+          assets=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
           old=$(asset_id "$STATE_ASSET")
           if [ -n "$old" ]; then
             prev=$(asset_id "$STATE_PREV")
             if [ -n "$prev" ]; then
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$prev"
+              del_asset "$prev"
             fi
             rename "$old" "$STATE_PREV"
           fi
           rename "$(asset_id "$STATE_ASSET.new")" "$STATE_ASSET"
-          gh release upload "$DATA_TAG" "$DB_ASSET.new" --clobber
+          retry gh release upload "$DATA_TAG" "$DB_ASSET.new" --clobber
           # The manifest describes the copy just uploaded, plus its checksum.
           jq --arg sha "$(sha256sum "$DB_ASSET.new" | cut -d' ' -f1)" '. + {gz_sha256: $sha}' \
             data/manifest.json > manifest.json
-          gh release upload "$DATA_TAG" manifest.json --clobber
+          retry gh release upload "$DATA_TAG" manifest.json --clobber
           # Nothing is deleted until a newer copy exists (issue #38): the copy
           # this run replaces becomes $PREV_ASSET (one run back), and the first
           # run of each Taipei day also keeps a dated copy for a week. To roll
           # back, see README "Daily run".
-          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          assets=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
           old=$(asset_id "$DB_ASSET")
           if [ -n "$old" ]; then
             prev=$(asset_id "$PREV_ASSET")
             if [ -n "$prev" ]; then
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$prev"
+              del_asset "$prev"
             fi
             rename "$old" "$PREV_ASSET"
           fi
@@ -194,13 +200,13 @@ jobs:
           daily="radar-$(date +%F).db.gz"
           if [ -z "$(asset_id "$daily")" ]; then
             mv "$DB_ASSET.new" "$daily"
-            gh release upload "$DATA_TAG" "$daily"
+            retry gh release upload "$DATA_TAG" "$daily"
           fi
           cutoff="radar-$(date -d '7 days ago' +%F).db.gz"
           while read -r id name; do
             if [[ $name =~ ^radar-[0-9]{4}-[0-9]{2}-[0-9]{2}\.db\.gz$ && $name < $cutoff ]]; then
               echo "Deleting old snapshot $name"
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+              del_asset "$id"
             fi
           done <<<"$assets"
 
@@ -226,15 +232,19 @@ jobs:
           db.execute("PRAGMA journal_mode=DELETE")
           db.close()
           EOF
+          # GitHub answers the odd release call with a 5xx; retry (#49).
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
+          # A DELETE that errored but went through leaves nothing to retry.
+          del_asset() { retry gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$1" || ! gh api "repos/$GITHUB_REPOSITORY/releases/assets/$1" >/dev/null 2>&1; }
           gzip -c data/state.db > "$STATE_ASSET.new"
-          gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
-          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          retry gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
+          assets=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
           asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
           old=$(asset_id "$STATE_ASSET")
           if [ -n "$old" ]; then
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+            del_asset "$old"
           fi
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$(asset_id "$STATE_ASSET.new")" -f name="$STATE_ASSET" >/dev/null
+          retry gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$(asset_id "$STATE_ASSET.new")" -f name="$STATE_ASSET" >/dev/null
 
       # GitHub starts few of the hourly scheduled runs, so while a backfill is
       # incomplete each run starts the next one. The `daily` group keeps at
