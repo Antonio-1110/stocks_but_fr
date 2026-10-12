@@ -50,18 +50,27 @@ _COLUMNS = ["total_return", "cagr", "max_drawdown", "sharpe", "trades", "win_rat
 _BENCH = ["total_return", "cagr", "max_drawdown", "sharpe"]
 
 
+# Columns added after the table first shipped, created on existing databases.
+_ADDED = {"snapshot": "TEXT", "code": "TEXT"}  # data snapshot id, backtest commit (#44)
+
+
 def save(db_path: str | Path, run_at: str, strategy: str, params: dict,
-         periods: list[dict], report: str) -> None:
+         periods: list[dict], report: str, snapshot: str = "", code: str = "") -> None:
     """periods: dicts with keys period, summary, bench_summary, benchmark."""
     con = sqlite3.connect(db_path)
     try:
         con.executescript(SCHEMA)
+        have = {r[1] for r in con.execute("PRAGMA table_info(backtest_runs)")}
+        for col, typ in _ADDED.items():
+            if col not in have:
+                con.execute(f"ALTER TABLE backtest_runs ADD COLUMN {col} {typ}")
         for p in periods:
             s, b = p["summary"], p["bench_summary"]
             row = {"run_at": run_at, "strategy": strategy, "period": p["period"],
                    "start_date": s["start"], "end_date": s["end"],
                    "params": json.dumps(params, sort_keys=True, ensure_ascii=False),
-                   "benchmark": p["benchmark"], "report": report}
+                   "benchmark": p["benchmark"], "report": report,
+                   "snapshot": snapshot, "code": code}
             row.update({c: s[c] for c in _COLUMNS})
             row.update({f"bench_{c}": b[c] for c in _BENCH})
             cols = ", ".join(row)

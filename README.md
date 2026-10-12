@@ -32,6 +32,13 @@ roll back after a bad run, cancel any queued `daily` run, delete the
 `radar.db.gz` asset on the release page and rename the copy you want to
 `radar.db.gz`; the next run starts from it.
 
+Between collect and saving, `radar validate` runs hard checks (sane prices, no
+rows lost, no date going backwards since the last snapshot). If one fails, the
+run stops and nothing is uploaded. On a pass it records the snapshot (row
+counts, latest dates, revenue coverage, commit, soft-check results) in the
+database's `snapshots` table and as `manifest.json` on the release. Backtest
+reports name the snapshot and commit they ran on.
+
 ## Calendar
 
 `public/calendar.html` (linked from the dashboard) marks 法說會, ex-dividend

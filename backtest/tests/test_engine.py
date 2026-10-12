@@ -144,6 +144,23 @@ def test_runner_writes_table_and_reports(db, md, tmp_path):
                                                   ("test", "buy_and_hold_0050", "0050")]
     assert rows[1][2] == "2020-01-02"
     assert rows[0][4] == pytest.approx(rows[0][5])  # same strategy as the benchmark
+    # No validated snapshot in the fixture database: the run says so.
+    assert out["snapshot"] == "unversioned" and "data snapshot unversioned" in md_text
+    assert con.execute("SELECT DISTINCT snapshot FROM backtest_runs").fetchall() == [("unversioned",)]
+
+
+def test_runner_records_snapshot(db, md, tmp_path):
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE snapshots (id TEXT PRIMARY KEY, code_sha TEXT NOT NULL, manifest TEXT NOT NULL)")
+    con.executemany("INSERT INTO snapshots VALUES (?, ?, '{}')",
+                    [("2026-10-11T10:00:00Z", "aaaaaaa111"), ("2026-10-12T10:00:00Z", "bbbbbbb222")])
+    con.commit()
+    s = fixture.settings(db, design_start="2019-12-02", design_end="2019-12-31", test_start="2020-01-02")
+    out = runner.run(md, s, runner.strategy_factory("buy_and_hold:0050", s), report_dir=tmp_path / "r")
+    assert out["snapshot"] == "2026-10-12T10:00:00Z"
+    assert "data snapshot 2026-10-12T10:00:00Z (collected by bbbbbbb)" in out["reports"][0].read_text()
+    assert con.execute("SELECT DISTINCT snapshot, code FROM backtest_runs").fetchall() == [
+        ("2026-10-12T10:00:00Z", out["code"])]
 
 
 def test_metrics_on_known_curve():

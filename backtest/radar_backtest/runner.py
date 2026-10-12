@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib
+import subprocess
 import sys
 from pathlib import Path
 from typing import Callable
@@ -11,7 +12,7 @@ from typing import Callable
 from . import metrics, report, results
 from .baseline import BuyAndHold
 from .config import Settings
-from .data import MarketData
+from .data import MarketData, snapshot
 from .engine import Engine, Strategy
 
 BACKTEST_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +33,19 @@ def strategy_factory(name: str, settings: Settings) -> Factory:
     module = importlib.import_module(f"strategies.{name}")
     params = settings.strategies.get(name, {})
     return lambda: module.make(params, settings)
+
+
+def code_version() -> str:
+    """Short commit of the backtester's checkout, "+dirty" with local changes;
+    "unknown" outside git."""
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=BACKTEST_DIR,
+                             capture_output=True, text=True, check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", "."], cwd=BACKTEST_DIR,
+                               capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return sha + ("+dirty" if dirty else "")
 
 
 def periods(settings: Settings) -> list[tuple[str, str, str | None]]:
@@ -70,7 +84,11 @@ def run(data: MarketData, settings: Settings, factory: Factory,
     if not out:
         raise ValueError("no period has price data")
     run_at = (now or dt.datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
-    source = str(settings.db_path)
+    snap, collected_by = snapshot(settings.db_path)
+    code = code_version()
+    source = (f"{settings.db_path}, data snapshot {snap}"
+              + (f" (collected by {collected_by[:7]})" if collected_by else "")
+              + f", backtest code {code}")
     paths = []
     if report_dir is not None:
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -80,5 +98,6 @@ def run(data: MarketData, settings: Settings, factory: Factory,
         paths = [stem.with_suffix(".md"), stem.with_suffix(".html")]
     if save:
         results.save(settings.db_path, run_at, name, params, out,
-                     str(paths[0]) if paths else "")
-    return {"strategy": name, "params": params, "periods": out, "reports": paths}
+                     str(paths[0]) if paths else "", snapshot=snap, code=code)
+    return {"strategy": name, "params": params, "periods": out, "reports": paths,
+            "snapshot": snap, "code": code}

@@ -157,3 +157,15 @@ def load(db_path: str | Path, tickers: list[str] | None = None) -> MarketData:
         companies=companies, revenue=revenue, flows=flows,
     )
 
+
+def snapshot(db_path: str | Path) -> tuple[str, str]:
+    """The newest validated snapshot in the database (`radar validate`, issue
+    #44) as (id, commit that collected it); ("unversioned", "") if none."""
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = con.execute("SELECT id, code_sha FROM snapshots ORDER BY id DESC LIMIT 1").fetchone()
+    except sqlite3.OperationalError:  # no snapshots table yet
+        row = None
+    finally:
+        con.close()
+    return (row[0], row[1]) if row else ("unversioned", "")

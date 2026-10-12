@@ -92,6 +92,13 @@ jobs:
           set -o pipefail
           ./radar collect 2>&1 | tee collect.log
 
+      # Hard checks (prices sane, no rows lost, no date going backwards since
+      # the last snapshot) stop the job here, before anything is uploaded.
+      # On a pass the manifest is stored in the database's snapshots table
+      # and in data/manifest.json (issue #44).
+      - name: Validate
+        run: ./radar validate
+
       # Upload under a temporary name, then swap, so a failed upload never
       # leaves the release without a database.
       - name: Save database
@@ -113,6 +120,10 @@ jobs:
               --notes "Latest data/radar.db, replaced by the daily workflow. Not a software release."
           fi
           gh release upload "$DATA_TAG" "$DB_ASSET.new" --clobber
+          # The manifest describes the copy just uploaded, plus its checksum.
+          jq --arg sha "$(sha256sum "$DB_ASSET.new" | cut -d' ' -f1)" '. + {gz_sha256: $sha}' \
+            data/manifest.json > manifest.json
+          gh release upload "$DATA_TAG" manifest.json --clobber
           # Nothing is deleted until a newer copy exists (issue #38): the copy
           # this run replaces becomes $PREV_ASSET (one run back), and the first
           # run of each Taipei day also keeps a dated copy for a week. To roll

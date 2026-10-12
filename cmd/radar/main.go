@@ -18,6 +18,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/paper"
 	"github.com/Antonio-1110/stocks_but_fr/internal/site"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
+	"github.com/Antonio-1110/stocks_but_fr/internal/validate"
 )
 
 // A step is one unit of work. A failing collector is logged and skipped so the
@@ -47,7 +48,7 @@ var renderers = []step{
 func main() {
 	configPath := flag.String("config", "radar.toml", "path to the config file")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|render")
+		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render")
 	}
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -61,6 +62,10 @@ func main() {
 		steps = collectors
 	case "render":
 		steps = renderers
+	case "validate":
+		// Unlike collect and render, a failure here must stop the run so
+		// nothing is published (issue #44).
+		steps = []step{{"validate", validate.Run}}
 	default:
 		flag.Usage()
 		os.Exit(2)
@@ -88,4 +93,7 @@ func main() {
 		log.Printf("%s: done", s.name)
 	}
 	log.Printf("%s: %d steps, %d failed", flag.Arg(0), len(steps), failed)
+	if flag.Arg(0) == "validate" && failed > 0 {
+		os.Exit(1)
+	}
 }
