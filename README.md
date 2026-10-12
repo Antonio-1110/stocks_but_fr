@@ -28,9 +28,10 @@ site changes go live in minutes. Download the database to backtest locally:
 
 The release also keeps `radar.prev.db.gz` (the copy before the latest run) and
 `radar-YYYY-MM-DD.db.gz` (the first run of each of the last 7 Taipei days). To
-roll back after a bad run, cancel any queued `daily` run, delete the
-`radar.db.gz` asset on the release page and rename the copy you want to
-`radar.db.gz`; the next run starts from it.
+roll back after a bad run, cancel any queued `daily` run, rename the
+`radar.db.gz` asset (e.g. to `radar.bad.db.gz`), rename the copy you want to
+`radar.db.gz`, then delete the bad one; the next run starts from it. A run
+that finds no `radar.db.gz` on the release stops rather than starting empty.
 
 Between collect and saving, `radar validate` runs hard checks (sane prices, no
 rows lost, no date going backwards since the last snapshot). If one fails, the

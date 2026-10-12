@@ -84,7 +84,10 @@ jobs:
               exit 0
             fi
           done
-          echo "Release '$DATA_TAG' has no database asset; starting empty"
+          # Never start empty once a release exists: an empty database would
+          # pass validation and replace the real one (#51).
+          echo "::error::Release '$DATA_TAG' has no $DB_ASSET. Rename $PREV_ASSET or a dated radar-*.db.gz copy to $DB_ASSET, then rerun."
+          exit 1
 
       # Paper portfolios and alert state live in data/state.db, saved apart
       # from market data so a market-data rollback doesn't rewind them. With
