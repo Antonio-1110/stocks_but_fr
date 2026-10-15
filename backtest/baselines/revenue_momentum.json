@@ -1,10 +1,10 @@
 {
  "strategy": "revenue_momentum",
  "snapshot": {
-  "id": "2026-10-12T22:51:31Z",
-  "collected_by": "55695335e4c5375fab006f198393d50483daff44",
-  "asset": "baseline-2026-10-12.db.gz",
-  "gz_sha256": "9b90257d91eb7b5faafb7a26d536caf05a1b1813ae4b438074367912b96e8078",
+  "id": "2026-10-14T19:10:02Z",
+  "collected_by": "4398a2930a71d019a01e3eefc62fb55677f3c7ab",
+  "asset": "radar-2026-10-15.db.gz",
+  "gz_sha256": "5854cbf9017f39f57b9f79a91a42dbafe4480d34a18b134e6875df3ee690c1f9",
   "revenue_coverage": [
    {
     "month": "2026-08",
@@ -14,19 +14,19 @@
    },
    {
     "month": "2026-09",
-    "have": 1856,
+    "have": 1959,
     "listed": 1970,
-    "share": 0.9421319796954315
+    "share": 0.9944162436548223
    }
   ],
   "rows": {
-   "companies": 3048,
-   "institutional_flows": 5711319,
-   "monthly_revenue": 342990,
-   "prices": 7361194
+   "companies": 3049,
+   "institutional_flows": 5715799,
+   "monthly_revenue": 343093,
+   "prices": 7364869
   }
  },
- "backtest_code": "5569533",
+ "backtest_code": "4398a29",
  "params": {
   "top_n": 12,
   "exit_rank": 30,
@@ -86,21 +86,21 @@
   },
   "test": {
    "summary": {
-    "cagr": 0.4532,
+    "cagr": 0.4467,
     "max_drawdown": -0.3464,
-    "sharpe": 1.4634,
-    "total_return": 11.5878,
-    "trades": 627,
-    "win_rate": 0.4641,
-    "annual_turnover": 7.3669,
-    "total_costs": 5299251.0,
-    "final_equity": 62938752.0285,
+    "sharpe": 1.4471,
+    "total_return": 11.2346,
+    "trades": 635,
+    "win_rate": 0.4693,
+    "annual_turnover": 7.5393,
+    "total_costs": 5485443.0,
+    "final_equity": 61173022.7426,
     "start": "2020-01-02",
-    "end": "2026-10-12"
+    "end": "2026-10-14"
    },
    "benchmark": {
     "ticker": "0050",
-    "cagr": 0.2941,
+    "cagr": 0.2908,
     "max_drawdown": -0.3396
    },
    "yearly": {
@@ -110,7 +110,7 @@
     "2023": 0.5658,
     "2024": 0.6523,
     "2025": 0.3911,
-    "2026": 0.4501
+    "2026": 0.4094
    },
    "benchmark_yearly": {
     "2020": 0.2923,
@@ -119,7 +119,7 @@
     "2023": 0.2752,
     "2024": 0.4864,
     "2025": 0.3687,
-    "2026": 0.7855
+    "2026": 0.7575
    }
   }
  },

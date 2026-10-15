@@ -48,6 +48,8 @@ summing to at most 1) to rebalance at the next open, or `None` to do nothing.
 on a pinned data snapshot. `tests/test_baseline.py` reruns it and fails on drift
 (skipped unless `RADAR_BASELINE_DB` points to the snapshot). A change that moves
 the numbers on purpose records a new baseline instead.
+The daily run never deletes a dated snapshot named by a baseline's
+`snapshot.asset`, so the pinned data stays downloadable.
 
 ## Checked against real data (issue #23)
 

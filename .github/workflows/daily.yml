@@ -206,7 +206,12 @@ jobs:
             retry gh release upload "$DATA_TAG" "$daily"
           fi
           cutoff="radar-$(date -d '7 days ago' +%F).db.gz"
+          # Snapshots a backtest baseline was recorded on are kept (#52).
+          pinned=$(jq -r '.snapshot.asset // empty' backtest/baselines/*.json 2>/dev/null || true)
           while read -r id name; do
+            if grep -qxF "$name" <<<"$pinned"; then
+              continue
+            fi
             if [[ $name =~ ^radar-[0-9]{4}-[0-9]{2}-[0-9]{2}\.db\.gz$ && $name < $cutoff ]]; then
               echo "Deleting old snapshot $name"
               del_asset "$id"
