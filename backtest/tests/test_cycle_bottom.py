@@ -123,3 +123,66 @@ def test_unknown_param_is_rejected(tmp_path):
     from strategies import cycle_bottom
     with pytest.raises(ValueError):
         cycle_bottom.make({"stoploss": 0.1}, None)
+
+
+# --- survivorship (issue #55) ----------------------------------------------
+
+LAST_TRADE = pd.Timestamp("2019-10-31")   # 2344's last trading day
+DELISTED = "2019-11-15"                    # its delisting date
+
+
+def build_delisted(path, listed_on=""):
+    """The base market plus 2344, a memory maker with 2408's revenue and
+    prices that stops trading on LAST_TRADE and is delisted on DELISTED.
+    Ties in the entry score go to the lower ticker, so with one slot 2344 is
+    picked first."""
+    build(path)
+    con = sqlite3.connect(path)
+    i = np.arange(len(DAYS))
+    live = int((DAYS <= LAST_TRADE).sum())
+    con.executemany("INSERT INTO prices VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    _prices("2344", 50 * 1.0005 ** i)[:live])
+    con.execute("INSERT INTO companies VALUES (?,?,?,?,?,?,?)",
+                ("TW", "2344", "Gone Memory Co", "半導體業", "TWSE", listed_on, DELISTED))
+    # Revenue stops after September 2019, like a company on its way out.
+    rev = [r for r in _revenue("2344") if r[2] <= "2019-09-01"]
+    con.executemany("INSERT INTO monthly_revenue VALUES (?,?,?,?,?,?,?)", rev)
+    con.commit()
+    con.close()
+    return path
+
+
+def run_delisted(tmp_path, listed_on="", **params):
+    db = build_delisted(tmp_path / "radar.db", listed_on)
+    s = fixture.settings(db)
+    s = dataclasses.replace(s, strategies={"cycle_bottom": {"yoy_window": 1, "max_positions": 1, **params}})
+    strat = runner.strategy_factory("cycle_bottom", s)()
+    return Engine(data.load(db), s).run(strat, DAYS[0], DAYS[-1])
+
+
+def test_a_later_delisted_stock_is_picked_and_held(tmp_path):
+    res = run_delisted(tmp_path)
+    first = [f for f in res.fills if f.side == "buy"][0]
+    assert (first.ticker, first.day) == ("2344", pd.Timestamp("2019-09-12"))
+
+
+def test_delisted_holding_exits_at_last_close_and_frees_its_slot(tmp_path):
+    res = run_delisted(tmp_path)
+    sells = [f for f in res.fills if f.ticker == "2344" and f.side == "sell"]
+    # The engine sells it the day after its last trade, at that last close.
+    assert [f.day for f in sells] == [pd.Timestamp("2019-11-01")]
+    last = int((DAYS <= LAST_TRADE).sum()) - 1
+    assert sells[0].price == pytest.approx(50 * 1.0005 ** last)
+    assert [t for t in res.trades if t.ticker == "2344"][0].delisted
+    # Until the delisting date it may only be suspended, so the slot stays
+    # taken; then the strategy drops it and buys 2408 at the next open.
+    later = [f for f in res.fills if f.ticker == "2408" and f.side == "buy"]
+    assert later and later[0].day == pd.Timestamp("2019-11-18")
+
+
+def test_not_bought_before_listing(tmp_path):
+    # A listing date after the signal keeps 2344 out of the universe even
+    # though it has prices, so 2408 takes the only slot instead.
+    res = run_delisted(tmp_path, listed_on="2019-10-01")
+    assert [f for f in res.fills if f.side == "buy"][0].ticker == "2408"
+    assert "2344" not in {f.ticker for f in res.fills}

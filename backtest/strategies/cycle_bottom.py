@@ -29,6 +29,18 @@ A stock stopped out can't come back until a newer revenue month is out.
 Each position gets 1/`max_positions` of equity when bought, and is then left
 to run: the strategy keeps a shadow of the portfolio so that adding a new
 stock doesn't trim the winners back to equal weight.
+
+Survivorship (issue #55):
+- The universe is the companies listed on the signal day (view.companies()),
+  so stocks delisted later are in it until their delisting date.
+- A held stock that stops trading is sold by the engine at its last close.
+  On that day nobody knows it won't trade again (it may only be suspended),
+  so it stays in the shadow book, marked at its last close, until its
+  delisting date is reached; then it leaves the book and its slot is free.
+- Known gap: industries are each company's latest label, not the one it had
+  on the signal day, and companies delisted without one (57 since 2012 in the
+  2026-10-14 snapshot) are never picked. Once the companies table has
+  industry history, `_universe` should use the label as of `view.day`.
 """
 
 from __future__ import annotations
@@ -133,6 +145,13 @@ class CycleBottom:
         px = view.adj_close
         today = px.iloc[-1]
         changed = False
+
+        # Delisted holdings leave the book at their last close (the engine sold
+        # them the day after their last trade).
+        listed = set(view.companies()["ticker"])
+        for t in [t for t in self._units if t not in listed]:
+            self._sell(t, self._last(px, t))
+            changed = True
 
         # Exits.
         for t in list(self._units):
