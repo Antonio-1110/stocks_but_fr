@@ -5,7 +5,29 @@ import (
 	"sort"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/model"
+	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
+
+// outsideRange reports an open that can't have traded: outside the day's
+// low-high range. FinMind gives these for a stock's emerging-board (興櫃)
+// days before it listed, where its "open" is the previous day's average
+// price, the emerging board's reference price (issue #57). Such an open is
+// stored as 0, the schema's "no open", like a day without an opening trade.
+func outsideRange(open, high, low float64) bool {
+	return open > 0 && high > 0 && low > 0 && (open > high || open < low)
+}
+
+// repairOpens applies the same rule to stored rows, so prices collected
+// before the rule are fixed without fetching them again. It returns how
+// many rows changed (none once they are fixed).
+func repairOpens(st *store.Store) (int64, error) {
+	res, err := st.DB.Exec(`UPDATE prices SET open = 0
+		WHERE market = ? AND open > 0 AND high > 0 AND low > 0 AND (open > high OR open < low)`, model.MarketTW)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
 
 // priceRow is one row of FinMind TaiwanStockPrice.
 type priceRow struct {
@@ -30,11 +52,15 @@ func mergePrices(ticker string, raw []priceRow, events []adjEvent) []model.Price
 		if r.Close <= 0 {
 			continue
 		}
+		open := r.Open
+		if outsideRange(open, r.High, r.Low) {
+			open = 0
+		}
 		out = append(out, model.Price{
 			Market:   model.MarketTW,
 			Ticker:   ticker,
 			Date:     parseDay(r.Date),
-			Open:     r.Open,
+			Open:     open,
 			High:     r.High,
 			Low:      r.Low,
 			Close:    r.Close,

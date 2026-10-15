@@ -94,6 +94,11 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 		return finmindErr
 	}
 
+	if n, err := repairOpens(st); err != nil {
+		return fmt.Errorf("repair opens: %w", err)
+	} else if n > 0 {
+		log.Printf("tw: %d stored opens outside the day's range set to 0 (issue #57)", n)
+	}
 	n, err := rebuild(st, dirty)
 	if err != nil {
 		return fmt.Errorf("rebuild adjusted closes: %w", err)

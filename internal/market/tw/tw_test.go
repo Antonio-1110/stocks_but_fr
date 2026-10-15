@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -114,6 +115,40 @@ func TestMergeDropsSuspendedDays(t *testing.T) {
 	got := mergePrices("3474", raw, nil)
 	if len(got) != 2 || got[1].AdjClose != 29.8 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+// 4169 traded on the emerging board until it listed on 2026-04-08. Before
+// that FinMind's open is the previous day's average price, sometimes outside
+// the day's range (04-01); such an open is stored as 0. An in-range one is
+// kept: listed_on keeps those days out of backtests (issue #57).
+func TestMergeDropsOpenOutsideRange(t *testing.T) {
+	got := mergePrices("4169", load[priceRow](t, "TaiwanStockPrice_4169.json"), nil)
+	var opens []float64
+	for _, p := range got {
+		opens = append(opens, p.Open)
+	}
+	if want := []float64{0, 177.8, 174.61, 147}; fmt.Sprint(opens) != fmt.Sprint(want) {
+		t.Errorf("opens = %v, want %v", opens, want)
+	}
+}
+
+func TestRepairOpens(t *testing.T) {
+	st := openStore(t)
+	p := func(d string, o float64) model.Price {
+		return model.Price{Market: model.MarketTW, Ticker: "4169", Date: parseDay(d), Open: o, High: 183, Low: 167, Close: 180.5, AdjClose: 180.5}
+	}
+	st.UpsertPrices([]model.Price{p("2026-04-01", 160.93), p("2026-04-02", 170), p("2026-04-03", 0)})
+	if n, err := repairOpens(st); err != nil || n != 1 {
+		t.Fatalf("repaired %d, %v; want 1", n, err)
+	}
+	var open float64
+	st.DB.QueryRow(`SELECT open FROM prices WHERE date = '2026-04-01'`).Scan(&open)
+	if open != 0 {
+		t.Errorf("open = %v", open)
+	}
+	if n, _ := repairOpens(st); n != 0 {
+		t.Errorf("second repair changed %d rows", n)
 	}
 }
 
