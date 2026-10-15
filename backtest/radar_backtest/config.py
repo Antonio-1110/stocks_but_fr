@@ -17,6 +17,19 @@ class Costs:
 
 
 @dataclass(frozen=True)
+class Limits:
+    """[limits.tw]: Taiwan's daily price limit (issue #53)."""
+
+    pct: float          # limit from `since` on...
+    old_pct: float      # ...and before it
+    since: str
+    tolerance: float    # a move this close to the limit counts as locked
+
+    def at(self, day) -> float:
+        return self.pct if str(day)[:10] >= self.since else self.old_pct
+
+
+@dataclass(frozen=True)
 class Settings:
     db_path: Path
     costs: Costs
@@ -28,6 +41,7 @@ class Settings:
     max_adv_fraction: float
     adv_days: int
     min_trade_value: float
+    limits: Limits | None = None   # None: fill at any open (no price-limit check)
     strategies: dict = field(default_factory=dict)  # raw [strategy.<name>] tables
     root: Path = Path(".")
 
@@ -57,6 +71,14 @@ def load(path: str | Path) -> Settings:
         max_adv_fraction=bt["max_adv_fraction"],
         adv_days=bt["adv_days"],
         min_trade_value=float(bt["min_trade_value"]),
+        limits=_limits(raw.get("limits", {}).get("tw")),
         strategies=raw.get("strategy", {}),
         root=root,
     )
+
+
+def _limits(raw: dict | None) -> Limits | None:
+    if not raw:
+        return None
+    return Limits(pct=float(raw["pct"]), old_pct=float(raw["old_pct"]),
+                  since=str(raw["since"]), tolerance=float(raw["tolerance"]))

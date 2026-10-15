@@ -14,6 +14,12 @@ Rules, so results stay comparable and honest:
 - A held stock that stops trading (delisted) is sold at its last traded price.
 - A stock with no price on the fill day (suspended) is skipped; the order is
   counted in skipped_orders and the next signal can try again.
+- Price limits ([limits.tw], issue #53): an open locked at limit-up can't be
+  bought, so that buy is skipped; an open locked at limit-down can't be sold
+  into, so that sell waits for the next open, and the next, until it fills or
+  a new signal replaces it. "Locked" compares the open with the previous close
+  on the adjusted scale (ex-dividend gaps aren't moves). Both are counted in
+  limit_blocked.
 """
 
 from __future__ import annotations
@@ -96,6 +102,11 @@ class RunResult:
     tax_paid: float = 0.0
     traded_value: float = 0.0    # buys plus sells, NTD
     skipped_orders: int = 0
+    # Issue #53: fills a real account couldn't get. limit_blocked is the total:
+    # buys skipped at a limit-up open plus days a sell waited out a limit-down open.
+    limit_blocked: int = 0
+    limit_blocked_buys: int = 0
+    limit_deferred_sells: int = 0
     fills: list[Fill] = field(default_factory=list)
     log: list[str] = field(default_factory=list)
 
@@ -111,6 +122,8 @@ class Engine:
         etf = {r.ticker: fees.is_etf(r.ticker, r.industry or "")
                for r in data.companies.itertuples()}
         self.etf = lambda t: etf.get(t, fees.is_etf(t))
+        self._deferred: dict[str, float | None] = {}
+        self.lock = _locks(data, settings.limits)
 
     def run(self, strategy: Strategy, start: str | pd.Timestamp,
             end: str | pd.Timestamp | None = None) -> RunResult:
@@ -125,6 +138,7 @@ class Engine:
         self._cash = self.s.initial_capital
         self._pos: dict[str, _Position] = {}
         self._res = res
+        self._deferred = {}  # ticker -> units still to sell (None: all of it)
         pending: tuple[pd.Timestamp, dict[str, float]] | None = None
         equity, invested = [], []
 
@@ -133,6 +147,8 @@ class Engine:
             if pending is not None:
                 self._rebalance(day, *pending)
                 pending = None
+            elif self._deferred:
+                self._retry_sells(day)
             value = self._mark(day)
             equity.append(self._cash + value)
             invested.append(value)
@@ -188,8 +204,40 @@ class Engine:
             self._pos[t].trade.delisted = True
             self._res.log.append(f"{day.date()} {t}: no trades since {last.date()}, sold at last close")
             self._sell(day, t, self._pos[t].units * price, price, everything=True)
+            self._deferred.pop(t, None)
+
+    def _locked(self, day, ticker: str) -> int:
+        """+1 if the open on `day` is locked at limit-up, -1 at limit-down, else 0."""
+        if self.lock is None or ticker not in self.lock.columns:
+            return 0
+        return int(self.lock.at[day, ticker])
+
+    def _defer_sell(self, day, ticker: str, units: float | None) -> None:
+        self._deferred[ticker] = units
+        self._res.limit_deferred_sells += 1
+        self._res.limit_blocked += 1
+        self._res.log.append(f"{day.date()} {ticker}: opened at limit-down, sell waits for the next open")
+
+    def _retry_sells(self, day) -> None:
+        """Sells that waited out a limit-down open try again at this open."""
+        opens = self.data.adj_open.loc[day]
+        for t, units in list(self._deferred.items()):
+            del self._deferred[t]
+            p = self._pos.get(t)
+            if p is None:
+                continue
+            px = opens.get(t)
+            if px is None or pd.isna(px):        # not trading today: keep waiting
+                self._deferred[t] = units
+                continue
+            if self._locked(day, t) < 0:
+                self._defer_sell(day, t, units)
+                continue
+            everything = units is None or units >= p.units * (1 - 1e-9)
+            self._sell(day, t, p.units * px if everything else units * px, px, everything)
 
     def _rebalance(self, day, signal_day, weights: dict[str, float]) -> None:
+        self._deferred.clear()  # a new signal replaces sells still waiting
         opens = self.data.adj_open.loc[day]
         tradable = {t for t in set(weights) | set(self._pos)
                     if t in opens.index and pd.notna(opens[t])}
@@ -212,8 +260,15 @@ class Engine:
             if t not in tradable:
                 self._res.skipped_orders += 1
                 continue
-            if delta < 0:
+            lock = self._locked(day, t)
+            if delta < 0 and lock < 0:
+                self._defer_sell(day, t, None if target == 0 else -delta / px[t])
+            elif delta < 0:
                 self._sell(day, t, now if target == 0 else -delta, px[t], everything=target == 0)
+            elif lock > 0:
+                self._res.limit_blocked_buys += 1
+                self._res.limit_blocked += 1
+                self._res.log.append(f"{day.date()} {t}: opened at limit-up, buy skipped")
             else:
                 buys.append((t, delta))
 
@@ -253,3 +308,18 @@ def _clean(weights: dict[str, float]) -> dict[str, float]:
     if total > 1.0:
         w = {t: v / total for t, v in w.items()}
     return w
+
+
+def _locks(data: MarketData, limits) -> pd.DataFrame | None:
+    """Date x ticker: +1 where the open is locked at limit-up versus the
+    previous traded close, -1 at limit-down, 0 otherwise. Both prices are on
+    the adjusted scale, so a dividend or split doesn't look like a move."""
+    if limits is None:
+        return None
+    prev = data.adj_close.ffill().shift(1)
+    move = data.adj_open / prev - 1
+    days = move.index
+    limit = pd.Series([limits.at(d.date().isoformat()) for d in days], index=days) - limits.tolerance
+    up = move.ge(limit, axis=0)
+    down = move.le(-limit, axis=0)
+    return up.astype("int8") - down.astype("int8")

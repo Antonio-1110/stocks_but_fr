@@ -5,7 +5,9 @@
 // It runs as a `radar collect` step after the collectors. Each run:
 //
 //  1. fills the orders signalled earlier at the open of the next trading day
-//     (sells before buys, so the cash is there);
+//     (sells before buys, so the cash is there). As in the backtest, a buy
+//     whose open is locked at limit-up is skipped, and a sell waits while the
+//     open is locked at limit-down ([limits.tw], issue #53);
 //  2. once a new trading day is fully collected, asks the strategy what to do
 //     on its close and records the orders;
 //  3. marks the portfolio and the benchmark at the latest close.
@@ -120,6 +122,7 @@ type order struct {
 	Commission, Tax, PnL float64
 	Note                 string
 	changed              bool
+	waited               int // opens it waited out at limit-down (sells, this run)
 }
 
 // book is one portfolio's state, loaded, changed in memory, then saved.
@@ -218,8 +221,9 @@ func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now
 	}
 	costs := cfg.Costs.TW
 
-	fill(m, b, costs)
-	fillBench(m, b, costs)
+	lim := cfg.Limits.TW
+	fill(m, b, costs, lim)
+	fillBench(m, b, costs, lim)
 
 	if m.ready && m.last() > b.LastSignal {
 		h := mark(m, b, m.last())
@@ -246,8 +250,8 @@ func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now
 }
 
 // fill executes pending orders whose next trading day is in the window, in
-// day order, sells first.
-func fill(m *market, b *book, costs config.TWCosts) {
+// day order, sells first. A sell moves past opens locked at limit-down.
+func fill(m *market, b *book, costs config.TWCosts, lim config.TWLimits) {
 	type job struct {
 		o   *order
 		day string
@@ -257,7 +261,16 @@ func fill(m *market, b *book, costs config.TWCosts) {
 		if o.Status != "pending" {
 			continue
 		}
-		if d := m.after(o.SignalDate); d != "" {
+		d := m.after(o.SignalDate)
+		if o.Side == "sell" {
+			for o.waited = 0; d != "" && m.locked(lim, o.Ticker, d) < 0; d = m.after(d) {
+				o.waited++
+			}
+			if d == "" && o.waited > 0 {
+				log.Printf("paper: %s: sell %s waits: opened at limit-down %d day(s) so far", b.Name, o.Ticker, o.waited)
+			}
+		}
+		if d != "" {
 			jobs = append(jobs, job{o, d})
 		}
 	}
@@ -271,7 +284,7 @@ func fill(m *market, b *book, costs config.TWCosts) {
 		if j.o.Side == "sell" {
 			sell(m, b, j.o, j.day, costs)
 		} else {
-			buy(m, b, j.o, j.day, costs)
+			buy(m, b, j.o, j.day, costs, lim)
 		}
 	}
 }
@@ -295,6 +308,8 @@ func sell(m *market, b *book, o *order, day string, costs config.TWCosts) {
 		}
 		price = px.close
 		o.Note = "no trades since " + px.date + ", sold at its last close"
+	} else if o.waited > 0 {
+		o.Note = fmt.Sprintf("opened at limit-down %d day(s), sold at the next open", o.waited)
 	}
 	opened, ok := m.exact(o.Ticker, p.Opened)
 	if !ok {
@@ -311,7 +326,7 @@ func sell(m *market, b *book, o *order, day string, costs config.TWCosts) {
 	delete(b.pos, o.Ticker)
 }
 
-func buy(m *market, b *book, o *order, day string, costs config.TWCosts) {
+func buy(m *market, b *book, o *order, day string, costs config.TWCosts, lim config.TWLimits) {
 	o.changed = true
 	if b.pos[o.Ticker] != nil {
 		o.Status, o.Note = "skipped", "already held"
@@ -320,6 +335,10 @@ func buy(m *market, b *book, o *order, day string, costs config.TWCosts) {
 	px, ok := m.on(o.Ticker, day)
 	if !ok || px.open <= 0 {
 		o.Status, o.Note = "skipped", "no trade on "+day
+		return
+	}
+	if m.locked(lim, o.Ticker, day) > 0 {
+		o.Status, o.Note = "skipped", "opened at limit-up on "+day
 		return
 	}
 	value := math.Min(o.Target, b.Cash)
@@ -339,14 +358,15 @@ func buy(m *market, b *book, o *order, day string, costs config.TWCosts) {
 }
 
 // fillBench puts the starting capital into the benchmark at the open of the
-// first trading day after the portfolio started, like the portfolio's first fills.
-func fillBench(m *market, b *book, costs config.TWCosts) {
+// first trading day after the portfolio started, like the portfolio's first
+// fills, or of the next day whose open isn't locked at limit-up.
+func fillBench(m *market, b *book, costs config.TWCosts, lim config.TWLimits) {
 	if b.BenchDate != "" {
 		return
 	}
 	for d := m.after(b.StartedOn); d != ""; d = m.after(d) {
 		px, ok := m.on(b.BenchTicker, d)
-		if !ok || px.open <= 0 {
+		if !ok || px.open <= 0 || m.locked(lim, b.BenchTicker, d) > 0 {
 			continue
 		}
 		value := b.Capital

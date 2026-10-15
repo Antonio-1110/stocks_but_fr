@@ -25,6 +25,14 @@ max_adv_fraction = 0.05        # a buy may not make a position bigger than this 
 adv_days = 20                  # ...its average daily traded value over this many trading days
 min_trade_value = 10_000       # NTD; smaller rebalancing trades are skipped (full exits always happen)
 
+[limits.tw]                    # issue #53: daily price limits. A buy whose fill-day open is locked at
+                               # limit-up is skipped; a sell waits while the open is locked at limit-down.
+                               # Both compare the open with the previous close on the adjusted scale.
+pct = 0.10                     # limit since `since`...
+old_pct = 0.07                 # ...and before it
+since = "2015-06-01"
+tolerance = 0.005              # a move within this of the limit counts as locked (limit prices round to a tick)
+
 [revenue]
 min_coverage = 0.9             # issue #37: paper portfolios and alerts use a revenue month only once this
                                # share of listed stocks has it (a backfill or the filing week isn't the market)

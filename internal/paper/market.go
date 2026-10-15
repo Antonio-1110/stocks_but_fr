@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 )
 
 // bar is one stock's day. Adjusted and raw closes give the adjustment factor
@@ -69,6 +71,36 @@ func (m *market) lastOn(ticker, d string) (bar, bool) {
 	}
 	return m.query(`SELECT date, open, close, adj_close, turnover FROM prices
 		WHERE market = 'TW' AND ticker = ? AND date <= ? ORDER BY date DESC LIMIT 1`, ticker, d)
+}
+
+// before returns a ticker's newest bar strictly before d, from the window or,
+// failing that, the whole table.
+func (m *market) before(ticker, d string) (bar, bool) {
+	for i := len(m.dates) - 1; i >= 0; i-- {
+		if m.dates[i] >= d {
+			continue
+		}
+		if b, ok := m.bars[ticker][m.dates[i]]; ok {
+			return b, true
+		}
+	}
+	return m.query(`SELECT date, open, close, adj_close, turnover FROM prices
+		WHERE market = 'TW' AND ticker = ? AND date < ? AND close > 0 ORDER BY date DESC LIMIT 1`, ticker, d)
+}
+
+// locked is +1 when the ticker's open on d is locked at limit-up against its
+// previous close, -1 at limit-down, else 0 (issue #53). Both are compared on
+// the adjusted scale, so an ex-dividend open isn't a move.
+func (m *market) locked(lim config.TWLimits, ticker, d string) int {
+	cur, ok := m.on(ticker, d)
+	if !ok {
+		return 0
+	}
+	prev, ok := m.before(ticker, d)
+	if !ok {
+		return 0
+	}
+	return lim.Locked(d, cur.open*cur.factor(), prev.adj)
 }
 
 // exact returns a ticker's bar on d even outside the window (a position's fill day).

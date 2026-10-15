@@ -46,3 +46,30 @@ func TestCommission(t *testing.T) {
 		t.Errorf("1M order: got %v, want 855", got)
 	}
 }
+
+func TestLimitsLocked(t *testing.T) {
+	l := Default().Limits.TW
+	for _, c := range []struct {
+		day        string
+		open, prev float64
+		want       int
+		what       string
+	}{
+		{"2020-01-02", 11, 10, 1, "+10%"},
+		{"2020-01-02", 10.95, 9.99, 1, "limit price rounded down to the tick (+9.6%)"},
+		{"2020-01-02", 10.9, 10, 0, "+9%"},
+		{"2020-01-02", 9, 10, -1, "-10%"},
+		{"2020-01-02", 9.35, 10, 0, "-6.5%"},
+		{"2015-05-29", 10.7, 10, 1, "+7% before 2015-06-01"},
+		{"2015-05-29", 9.3, 10, -1, "-7% before 2015-06-01"},
+		{"2015-06-01", 10.7, 10, 0, "+7% from 2015-06-01"},
+		{"2020-01-02", 11, 0, 0, "no previous close"},
+	} {
+		if got := l.Locked(c.day, c.open, c.prev); got != c.want {
+			t.Errorf("%s: got %d, want %d", c.what, got, c.want)
+		}
+	}
+	if (TWLimits{}).Locked("2020-01-02", 20, 10) != 0 {
+		t.Error("zero limits should never lock")
+	}
+}

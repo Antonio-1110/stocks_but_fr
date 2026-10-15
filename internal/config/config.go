@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Run      Run      `toml:"run"`
 	Costs    Costs    `toml:"costs"`
+	Limits   Limits   `toml:"limits"`
 	Backtest Backtest `toml:"backtest"`
 	Revenue  Revenue  `toml:"revenue"`
 	Site     Site     `toml:"site"`
@@ -36,6 +37,46 @@ type TWCosts struct {
 	SellTax         float64 `toml:"sell_tax"`
 	ETFSellTax      float64 `toml:"etf_sell_tax"`
 	DayTradeSellTax float64 `toml:"day_trade_sell_tax"`
+}
+
+type Limits struct {
+	TW TWLimits `toml:"tw"`
+}
+
+// TWLimits is [limits.tw]: Taiwan's daily price limit (issue #53). A buy whose
+// open is locked at limit-up is skipped; a sell waits while the open is locked
+// at limit-down.
+type TWLimits struct {
+	Pct       float64 `toml:"pct"`       // limit from Since on...
+	OldPct    float64 `toml:"old_pct"`   // ...and before it
+	Since     string  `toml:"since"`     // YYYY-MM-DD
+	Tolerance float64 `toml:"tolerance"` // a move this close to the limit counts as locked
+}
+
+// At is the limit on trading day d (YYYY-MM-DD).
+func (l TWLimits) At(d string) float64 {
+	if d >= l.Since {
+		return l.Pct
+	}
+	return l.OldPct
+}
+
+// Locked is +1 when an open of open against a previous close of prev (both
+// on the same adjusted scale) is at limit-up on day d, -1 at limit-down, and
+// 0 otherwise or when the limits are off (a limit of 0).
+func (l TWLimits) Locked(d string, open, prev float64) int {
+	limit := l.At(d)
+	if limit <= 0 || open <= 0 || prev <= 0 {
+		return 0
+	}
+	move := open/prev - 1
+	switch {
+	case move >= limit-l.Tolerance:
+		return 1
+	case move <= -(limit - l.Tolerance):
+		return -1
+	}
+	return 0
 }
 
 type Backtest struct {
@@ -157,6 +198,7 @@ func Default() Config {
 			ETFSellTax:      0.001,
 			DayTradeSellTax: 0.0015,
 		}},
+		Limits: Limits{TW: TWLimits{Pct: 0.10, OldPct: 0.07, Since: "2015-06-01", Tolerance: 0.005}},
 		Backtest: Backtest{
 			InitialCapital: 5_000_000,
 			Benchmark:      "0050",
@@ -223,6 +265,9 @@ func (c Config) validate() error {
 		"costs.tw.etf_sell_tax":       c.Costs.TW.ETFSellTax,
 		"costs.tw.day_trade_sell_tax": c.Costs.TW.DayTradeSellTax,
 		"revenue.min_coverage":        c.Revenue.MinCoverage,
+		"limits.tw.pct":               c.Limits.TW.Pct,
+		"limits.tw.old_pct":           c.Limits.TW.OldPct,
+		"limits.tw.tolerance":         c.Limits.TW.Tolerance,
 	}
 	for name, v := range rates {
 		if v < 0 || v > 1 {

@@ -41,6 +41,13 @@ summing to at most 1) to rebalance at the next open, or `None` to do nothing.
 - A stock with no price on the fill day is skipped and counted in the report.
 - An open outside the day's low-high range (FinMind has many on TWSE stocks)
   is treated as missing, so that day fills at the close.
+- Price limits (`[limits.tw]`, issue #53): ±10% since 2015-06-01, ±7% before.
+  A buy whose fill-day open is at limit-up (against the previous close, both
+  adjusted, within `tolerance` for tick rounding) is skipped. A sell whose open
+  is at limit-down waits for the next open, every day until it fills, unless a
+  new signal replaces it first. `RunResult.limit_blocked` counts both (blocked
+  buys plus days a sell waited; `limit_blocked_buys` and `limit_deferred_sells`
+  are the parts). The paper portfolios apply the same rule.
 
 ## Baseline (issue #50)
 
