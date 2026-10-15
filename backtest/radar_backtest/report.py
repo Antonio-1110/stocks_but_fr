@@ -7,6 +7,8 @@ import json
 
 import pandas as pd
 
+from .metrics import calendar_years
+
 # (key, label, format)
 ROWS = [
     ("start", "Start", "s"), ("end", "End", "s"),
@@ -15,9 +17,18 @@ ROWS = [
     ("cagr", "CAGR", "pct"),
     ("max_drawdown", "Max drawdown", "pct"),
     ("sharpe", "Sharpe (rf = 0)", "f2"),
+    ("sortino", "Sortino (rf = 0)", "f2"),
+    ("volatility", "Volatility (annualised)", "pct"),
+    ("longest_drawdown_days", "Longest drawdown, peak to recovery (trading days)", "s"),
+    ("longest_drawdown_dates", "Longest drawdown: dates", "s"),
+    ("avg_exposure", "Average exposure (invested / equity)", "pct"),
+    ("excess_cagr", "Excess CAGR over the benchmark", "pct"),
+    ("tracking_error", "Tracking error (annualised)", "pct"),
+    ("information_ratio", "Information ratio", "f2"),
     ("trades", "Closed trades", "s"),
     ("open_trades", "Still open at end", "s"),
     ("win_rate", "Win rate (closed trades)", "pct"),
+    ("top5_pnl_share", "Share of total P&L from the top 5 trades", "pct"),
     ("worst_trade_pct", "Worst single trade", "pct"),
     ("worst_trade_ntd", "Worst single trade (NTD)", "ntd"),
     ("worst_trade_ticker", "Worst trade: ticker", "s"),
@@ -32,6 +43,7 @@ ROWS = [
     ("tax_paid", "Sell tax paid (NTD)", "ntd"),
     ("total_costs", "Total costs paid (NTD)", "ntd"),
     ("skipped_orders", "Orders skipped (no price on fill day)", "s"),
+    ("limit_blocked", "Fills blocked by price limits (buys at limit-up, sell-days at limit-down)", "s"),
 ]
 
 
@@ -64,6 +76,27 @@ def _table(periods: list[dict], strategy: str) -> tuple[list[str], list[list[str
     return head, body
 
 
+def _years(periods: list[dict], strategy: str) -> tuple[list[str], list[list[str]]]:
+    """Calendar-year returns, strategy against benchmark, every period in one
+    table (a year split between periods appears once per period)."""
+    bench = periods[0]["benchmark"]
+    head = ["Year", "Period", strategy, bench, "Difference"]
+    body = []
+    for p in periods:
+        cap = p["summary"]["initial_capital"]
+        a = calendar_years(p["equity"], cap)
+        b = calendar_years(p["bench_equity"], p["bench_summary"]["initial_capital"])
+        last = pd.Timestamp(p["summary"]["end"])
+        first = pd.Timestamp(p["summary"]["start"])
+        for y in a.index:
+            partial = (y == first.year and (first.month, first.day) > (1, 5)) or \
+                      (y == last.year and (last.month, last.day) < (12, 24))
+            diff = a[y] - b[y] if y in b.index else None
+            body.append([f"{y}" + (" (partial)" if partial else ""), p["period"],
+                         _fmt(a[y], "pct"), _fmt(b.get(y), "pct"), _fmt(diff, "pct")])
+    return head, body
+
+
 NOTES = [
     "Orders are decided at a close and filled at the next trading day's open.",
     "Prices are dividend- and split-adjusted, so returns include dividends.",
@@ -72,6 +105,11 @@ NOTES = [
     "Worst trade and longest underwater include positions still open at the end, marked at the last close.",
     "Monthly revenue is used only after its announced_on date (the filing deadline).",
     "Stocks that stop trading are sold at their last traded price.",
+    "Volatility, Sharpe and Sortino are annualised from daily returns (252 a year); Sortino counts only down days as risk.",
+    "Longest drawdown runs from a peak close to the first close back at or above it.",
+    "Tracking error is the annualised spread of daily returns against the benchmark; information ratio is the annualised average daily difference over it.",
+    "Top-5 share: profit of the five best trades (closed or still open) over the total profit of all trades.",
+    "Calendar-year returns run from the previous year-end close (or the initial capital) to the year-end close.",
 ]
 
 
@@ -83,6 +121,9 @@ def markdown(strategy: str, params: dict, run_at: str, source: str, periods: lis
            "| " + " | ".join(head) + " |",
            "|" + "---|" * len(head)]
     out += ["| " + " | ".join(r) + " |" for r in body]
+    yh, yb = _years(periods, strategy)
+    out += ["", "## Calendar-year returns", "", "| " + " | ".join(yh) + " |", "|" + "---|" * len(yh)]
+    out += ["| " + " | ".join(r) + " |" for r in yb]
     out += ["", "## How to read this", ""] + [f"- {n}" for n in NOTES]
     for p in periods:
         if p["log"]:
@@ -94,6 +135,11 @@ def html_page(strategy: str, params: dict, run_at: str, source: str, periods: li
     head, body = _table(periods, strategy)
     e = html.escape
     rows = "".join("<tr>" + "".join(f"<td>{e(c)}</td>" for c in r) + "</tr>" for r in body)
+    yh, yb = _years(periods, strategy)
+    years = ("<h2>Calendar-year returns</h2><div class=\"wrap\"><table><thead><tr>"
+             + "".join(f"<th>{e(h)}</th>" for h in yh) + "</tr></thead><tbody>"
+             + "".join("<tr>" + "".join(f"<td>{e(c)}</td>" for c in r) + "</tr>" for r in yb)
+             + "</tbody></table></div>")
     charts = "".join(f"<h2>Equity, {e(p['period'])} period</h2>"
                      + _svg(p["equity"], p["bench_equity"], strategy, p["benchmark"])
                      for p in periods)
@@ -119,6 +165,7 @@ svg {{ width: 100%; height: auto; }}
 <p>Parameters: <code>{e(json.dumps(params, ensure_ascii=False, sort_keys=True))}</code></p>
 <div class="wrap"><table><thead><tr>{''.join(f'<th>{e(h)}</th>' for h in head)}</tr></thead>
 <tbody>{rows}</tbody></table></div>
+{years}
 {charts}
 <h2>How to read this</h2><ul>{notes}</ul>
 {events}

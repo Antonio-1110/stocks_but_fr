@@ -52,6 +52,13 @@ _BENCH = ["total_return", "cagr", "max_drawdown", "sharpe"]
 
 # Columns added after the table first shipped, created on existing databases.
 _ADDED = {"snapshot": "TEXT", "code": "TEXT"}  # data snapshot id, backtest commit (#44)
+# Risk, exposure, benchmark-relative and concentration metrics (#54).
+_METRICS = {"volatility": "REAL", "sortino": "REAL", "longest_drawdown_days": "INTEGER",
+            "avg_exposure": "REAL", "excess_cagr": "REAL", "tracking_error": "REAL",
+            "information_ratio": "REAL", "top5_pnl_share": "REAL", "limit_blocked": "INTEGER"}
+_BENCH_METRICS = {"volatility": "REAL", "sortino": "REAL", "longest_drawdown_days": "INTEGER"}
+_ADDED.update(_METRICS)
+_ADDED.update({f"bench_{c}": t for c, t in _BENCH_METRICS.items()})
 
 
 def save(db_path: str | Path, run_at: str, strategy: str, params: dict,
@@ -73,6 +80,8 @@ def save(db_path: str | Path, run_at: str, strategy: str, params: dict,
                    "snapshot": snapshot, "code": code}
             row.update({c: s[c] for c in _COLUMNS})
             row.update({f"bench_{c}": b[c] for c in _BENCH})
+            row.update({c: s.get(c) for c in _METRICS})
+            row.update({f"bench_{c}": b.get(c) for c in _BENCH_METRICS})
             cols = ", ".join(row)
             con.execute(f"INSERT INTO backtest_runs ({cols}) VALUES ({', '.join('?' * len(row))})",
                         list(row.values()))

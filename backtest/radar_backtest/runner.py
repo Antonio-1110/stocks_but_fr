@@ -73,7 +73,7 @@ def run(data: MarketData, settings: Settings, factory: Factory,
         out.append({
             "period": period,
             "benchmark": bench,
-            "summary": metrics.summarize(res),
+            "summary": metrics.summarize(res, bres),
             "bench_summary": metrics.summarize(bres),
             "bench_price_return": metrics.price_return(data.adj_close, bench, res.start, res.end),
             "equity": res.equity,
