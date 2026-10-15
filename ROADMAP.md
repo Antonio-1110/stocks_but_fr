@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-13, at the end of Sprint 1. Earlier: 2026-10-11, after the repository audit
+Updated 2026-10-15, at the end of Sprint 2. Earlier: 2026-10-13, end of Sprint 1; 2026-10-11, after the repository audit
 (`/mnt/project-files/audit/repo-audit-2026-10.md` in the project). Update this
 file at the end of every sprint. The owner's full handoff is not in the repo;
 the section numbers below refer to it.
@@ -10,10 +10,10 @@ Status words: **done**, **planned** (with the release it belongs to),
 
 ## Now
 
-Release 1 (trustworthy foundation) is half done. The data is complete and
-versioned, and revenue momentum has a pinned baseline
-([backtest/baselines/revenue_momentum.md](backtest/baselines/revenue_momentum.md)).
-Sprint 2 is proposed and waits for approval.
+Release 1 (trustworthy foundation) is nearly done. The data is complete, versioned
+and point-in-time for listings, and both strategies have pinned baselines
+([revenue momentum](backtest/baselines/revenue_momentum.md),
+[cycle bottom](backtest/baselines/cycle_bottom.md)). Sprint 3 is proposed below.
 
 **Sprint 0 (done 2026-10-11): fix what was broken or could lose data**
 
@@ -37,24 +37,49 @@ Sprint 2 is proposed and waits for approval.
 - #48 Paper trades are also written to an append-only ledger, reconciled each run.
 - #49, #51 The daily save retries GitHub errors, resumes a half-finished save, and
   never starts from an empty database.
-- #50 Revenue momentum baseline on snapshot 2026-10-12T22:51:31Z, kept on the
-  release as `baseline-2026-10-12.db.gz`. Design CAGR is 30.9% (0050 11.9%), test
-  CAGR 45.3% (0050 29.4%), and test max drawdown -34.6% (0050 -34.0%). A
-  regression test pins it.
+- #50 Revenue momentum baseline with a regression test. Its first snapshot rotated
+  off the release, so #52 re-recorded it and the daily cleanup now keeps any
+  snapshot a baseline names.
 
-**Sprint 2 (proposed): finish Release 1**
+**Sprint 2 (done 2026-10-15): finish the backtest's honesty checks**
 
-1. Security master: listing dates (empty for all 3,048 companies) and industry
-   history, so the universe on each past date is right.
-2. Fills a real account couldn't get: no buy at limit-up, no sell at limit-down.
-3. The metrics the audit asked for: volatility, Sortino, drawdown length, exposure,
-   return relative to 0050, and trade concentration. Add them to reports and the
-   baseline.
-4. Survivorship check for cycle bottom, then a cycle bottom baseline.
-5. Find the source of the 60,495 TWSE rows whose open is outside the day's range,
-   and fix them at collection if FinMind's open is wrong.
+- #56 Listing dates for all listed companies (from TWSE and TPEx), so a stock
+  enters the universe only once listed. Industry changes are recorded from now on.
+- #57 The 60,229 opens outside the day's range were emerging-board (興櫃) days
+  before listing, where FinMind's "open" is a reference price. They are stored as
+  "no open" and, with listing dates, leave the backtest universe.
+- #53 No buy at a limit-up open; a sell at a limit-down open waits. Same rule in
+  the backtester and paper portfolios.
+- #54 Reports add volatility, Sortino, drawdown length, exposure, excess return,
+  tracking error, information ratio, top-5 trade share and a yearly table.
+- #55 Cycle bottom does pick later-delisted stocks; a bug kept their slots
+  occupied after delisting. Fixed.
+- #60 The backtester counted a half-collected newest day as mass delistings. It now
+  skips that day, as paper already did.
+- #61 Baselines on snapshot 2026-10-14T19:10:02Z (`radar-2026-10-15.db.gz`, pinned):
 
-Release 1 is done when both strategies have baselines on data that passes these checks.
+  | Test period 2020-01 to 2026-10 | CAGR | Max drawdown |
+  |---|---|---|
+  | Revenue momentum | 43.3% | -32.9% |
+  | Cycle bottom | 27.1% | -46.9% |
+  | 0050 | 29.0% | -34.0% |
+
+  The limit rule cost revenue momentum about 3 points a year in the design period:
+  the buys it blocks are post-revenue limit-up gaps, among its biggest winners.
+  Cycle bottom trails 0050 since 2020 with a deeper drop.
+
+**Sprint 3 (proposed): close Release 1**
+
+1. Private database: move the `data` release to a private repo (waits on the
+   owner's one-time setup: the repo and a `DATA_TOKEN` secret).
+2. Stuck sells (#58): a paper sell stays pending for good if the stock is
+   suspended the day after the signal; the backtester drops a sell on a day with
+   no price.
+3. Keep revenue revisions instead of overwriting them (§8.3).
+
+Known limits, not scheduled: cycle bottom uses each company's current industry
+(past labels aren't available from any source we reach); 14 delisted TWSE names
+have no official listing date.
 
 ## The handoff, section by section
 
@@ -70,16 +95,16 @@ Release 1 is done when both strategies have baselines on data that passes these 
 | 4.4 | Autonomy progression | done as a rule: research → backtest → paper; live **deferred** (§15) |
 | 5 | Reported state | verified in the audit; differences listed there |
 | 6 | Six-layer architecture | partly done as boundaries inside the current monolith: state file separate from market data (#46). No new services |
-| 7.1 | Curated archive | done for Taiwan prices, events, revenue, flows. **Planned R1:** listing dates, industry history. FX, exchange calendars **deferred** to a second market |
+| 7.1 | Curated archive | done for Taiwan prices, events, revenue, flows, listing dates (#56); industry history from 2026-10 on. FX, exchange calendars **deferred** to a second market |
 | 7.2 | On-demand data with provenance | **planned R1:** source and retrieval time on stored rows. Filings, transcripts, news **cut**: link out instead |
 | 7.3 | Storage technology | SQLite stays. Parquet/DuckDB **deferred** until a backtest load takes over 5 minutes or a second market is added (measured: Parquet loads prices in 3 s instead of 47 s) |
 | 7.4 | Storage benchmark | done in the audit |
 | 8.1 | Staged publication | **trimmed**, done: snapshots + manifest + validation before publish (#38, #44). A separate candidate store and atomic manifest switching are **cut**: one writer, a daily cadence and kept snapshots cover the same risk |
-| 8.2 | Validation checks | done (`radar validate`, #44); more checks come with Sprint 2 |
+| 8.2 | Validation checks | done (`radar validate`, #44, #59, #60) |
 | 8.3 | Point-in-time | done for revenue (deadline rule), prices, flows. **Planned R1:** keep revenue revisions; real filing dates **deferred** until the deadline rule is shown to cost return |
-| 8.4 | Reproducibility | done: snapshot id and code version on every backtest run, pinned baseline (#44, #50) |
+| 8.4 | Reproducibility | done: snapshot id and code version on every backtest run, pinned baselines kept on the release (#44, #50, #52, #61) |
 | 8.5 | Data-health dashboard | done: one static page (#45) |
-| 9 | Security master | **planned R1:** listing dates, industry history, provider ids for Taiwan. Internal ids, multi-currency, settlement and short rules **deferred** to a second market |
+| 9 | Security master | done for Taiwan: listing dates and industry changes (#56). Internal ids, multi-currency, settlement and short rules **deferred** to a second market |
 | 10.1 | Market overview | **planned R2:** breadth, new highs and lows, sector strength, from data already stored |
 | 10.2 | Sector analysis | **planned R2:** sector revenue and price trends on the dashboard |
 | 10.3 | Cross-market comparison | **cut:** needs two markets and normalisation work for little decision value |
@@ -89,20 +114,20 @@ Release 1 is done when both strategies have baselines on data that passes these 
 | 11.4 | Signal history, no duplicate alerts | done: alert outbox is the history, sent only after saving (#47) |
 | 12 | Company research pages, thesis records | **cut** as built pages: Goodinfo, Yahoo and MOPS links already cover it. Thesis notes **deferred** until you keep them: a markdown file in the repo is enough to start |
 | 13.1 | Versioned strategy definitions | partly done (rules in code, settings in `radar.toml`). **Planned R3:** a version number recorded per run |
-| 13.2 | Backtest correctness audit | done (audit). Fixes: #40 done; survivorship in cycle bottom **planned R1** |
-| 13.3 | Execution assumptions | done: next open, costs, ADV cap. Locked limit-up fills **planned R1**. Partial fills and spread models **cut**: at NT$5M with a 5% ADV cap they change little |
+| 13.2 | Backtest correctness audit | done (audit). Fixes: #40, #55, #60 done |
+| 13.3 | Execution assumptions | done: next open, costs, ADV cap. Price-limit fills done (#53). Partial fills and spread models **cut**: at NT$5M with a 5% ADV cap they change little |
 | 13.4 | Robustness (walk-forward, sensitivity, subperiods) | **planned R3** as small scripts |
 | 13.5 | Experiment registry | **planned R3**, light: one row and one report per run, with dataset version and a conclusion field. No separate app |
-| 13.6 | Metrics | partly done. **Planned R1:** volatility, Sortino, drawdown length, exposure, benchmark-relative, trade concentration |
+| 13.6 | Metrics | done (#54) |
 | 14.1–14.3 | Paper portfolios | done for two strategies, with an append-only ledger in its own file (#46, #48) |
 | 14.4 | Portfolio analysis | partly done (equity vs 0050). Attribution **planned R3** |
 | 15 | Broker integration, live execution | **deferred**: trigger is a strategy that has paper-traded for 6+ months within its backtest range, and your explicit go-ahead |
 | 16 | AI integration | **cut** as a product feature: Claude in this project already summarises and drafts. Numbers stay in code |
 | 17.1 | Keep Actions and Pages | done |
-| 17.2 | Agent workflow (branches, PRs) | open question to the owner; until then main-only per AGENTS.md |
+| 17.2 | Agent workflow (branches, PRs) | decided 2026-10-15: main-only, per AGENTS.md |
 | 17.3 | CI/CD checks | done: tests before every publish and collect (#43) |
-| 17.4 | Cost management | done as a rule (PRODUCT.md non-goals). Licensing of the public data release: **open question** |
-| 18 R1 | Trustworthy foundation | in progress: Sprints 0–1 done, Sprint 2 proposed |
+| 17.4 | Cost management | done as a rule (PRODUCT.md non-goals). Data release: decided 2026-10-15 to make it private (**planned**, Sprint 3) |
+| 18 R1 | Trustworthy foundation | in progress: Sprints 0–2 done, Sprint 3 proposed to close it |
 | 18 R2 | Market and company intelligence | **planned**, trimmed as above (§10–12) |
 | 18 R3 | Research laboratory | **planned**, light (§13) |
 | 18 R4 | Multi-market | **deferred**: start a US prices-only universe (≤ 500 names) once R1–R3 work for Taiwan and you want a US sleeve. Singapore cut |
@@ -111,7 +136,7 @@ Release 1 is done when both strategies have baselines on data that passes these 
 | 20.1 | Data pipeline tests | done: parsers, backfill resume, validation (#44); rollback steps checked against a stubbed release (#46, #49) |
 | 20.2 | Backtest tests | done for engine and strategies on fixtures, plus the baseline regression run (#50) |
 | 20.3 | Paper trading tests | done: every paper test reconciles the ledger (#48) |
-| 20.4 | Regression testing | done for revenue momentum (#50); cycle bottom in Sprint 2 |
+| 20.4 | Regression testing | done for both strategies (#50, #61) |
 | 21 | Documentation | PRODUCT.md, ROADMAP.md, README, AGENTS.md, backtest/README.md. ARCHITECTURE, DATA and RESEARCH files **cut** for now: README and backtest/README cover them at this size. Revisit when either passes about 200 lines |
 | 22–23 | Audit | done |
 | 24 | Guiding principle | adopted |

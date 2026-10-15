@@ -49,10 +49,11 @@ summing to at most 1) to rebalance at the next open, or `None` to do nothing.
   buys plus days a sell waited; `limit_blocked_buys` and `limit_deferred_sells`
   are the parts). The paper portfolios apply the same rule.
 
-## Baseline (issue #50)
+## Baselines (issues #50, #61)
 
-`baselines/revenue_momentum.md` is the reference result for revenue momentum,
-on a pinned data snapshot. `tests/test_baseline.py` reruns it and fails on drift
+`baselines/<strategy>.md` is the reference result for each strategy (revenue
+momentum, cycle bottom), on a pinned data snapshot. `tests/test_baseline.py` reruns
+every baseline and fails on drift
 (skipped unless `RADAR_BASELINE_DB` points to the snapshot). A change that moves
 the numbers on purpose records a new baseline instead.
 The daily run never deletes a dated snapshot named by a baseline's

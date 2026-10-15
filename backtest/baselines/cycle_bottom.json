@@ -1,0 +1,135 @@
+{
+ "strategy": "cycle_bottom",
+ "snapshot": {
+  "id": "2026-10-14T19:10:02Z",
+  "collected_by": "4398a2930a71d019a01e3eefc62fb55677f3c7ab",
+  "asset": "radar-2026-10-15.db.gz",
+  "gz_sha256": "5854cbf9017f39f57b9f79a91a42dbafe4480d34a18b134e6875df3ee690c1f9",
+  "revenue_coverage": [
+   {
+    "month": "2026-08",
+    "have": 1967,
+    "listed": 1970,
+    "share": 0.9984771573604061
+   },
+   {
+    "month": "2026-09",
+    "have": 1959,
+    "listed": 1970,
+    "share": 0.9944162436548223
+   }
+  ],
+  "rows": {
+   "companies": 3049,
+   "institutional_flows": 5715799,
+   "monthly_revenue": 343093,
+   "prices": 7364869
+  }
+ },
+ "backtest_code": "a8476e4",
+ "params": {
+  "industries": [
+   "半導體業",
+   "光電業",
+   "航運業",
+   "鋼鐵工業",
+   "塑膠工業"
+  ],
+  "tickers": [],
+  "yoy_window": 3,
+  "trough_months": 12,
+  "min_negative_months": 6,
+  "improve_months": 2,
+  "max_entry_yoy": 10.0,
+  "rollover_months": 2,
+  "stop_loss": 0.25,
+  "price_ma_days": 60,
+  "max_positions": 10,
+  "min_avg_turnover": 20000000,
+  "turnover_days": 20
+ },
+ "periods": {
+  "design": {
+   "summary": {
+    "cagr": 0.1464,
+    "max_drawdown": -0.387,
+    "sharpe": 0.7622,
+    "total_return": 1.9802,
+    "trades": 185,
+    "win_rate": 0.4757,
+    "annual_turnover": 2.2585,
+    "total_costs": 709760.0,
+    "final_equity": 14900753.3272,
+    "start": "2012-01-02",
+    "end": "2019-12-31"
+   },
+   "benchmark": {
+    "ticker": "0050",
+    "cagr": 0.1195,
+    "max_drawdown": -0.2096
+   },
+   "yearly": {
+    "2012": 0.2786,
+    "2013": 0.2729,
+    "2014": -0.0389,
+    "2015": -0.2006,
+    "2016": 0.1756,
+    "2017": 0.5074,
+    "2018": -0.1091,
+    "2019": 0.5096
+   },
+   "benchmark_yearly": {
+    "2012": 0.1253,
+    "2013": 0.1168,
+    "2014": 0.1666,
+    "2015": -0.0628,
+    "2016": 0.1965,
+    "2017": 0.1814,
+    "2018": -0.0494,
+    "2019": 0.3352
+   }
+  },
+  "test": {
+   "summary": {
+    "cagr": 0.2708,
+    "max_drawdown": -0.4691,
+    "sharpe": 0.9349,
+    "total_return": 4.077,
+    "trades": 152,
+    "win_rate": 0.4868,
+    "annual_turnover": 1.9674,
+    "total_costs": 484362.0,
+    "final_equity": 25384944.9604,
+    "start": "2020-01-02",
+    "end": "2026-10-13"
+   },
+   "benchmark": {
+    "ticker": "0050",
+    "cagr": 0.29,
+    "max_drawdown": -0.3396
+   },
+   "yearly": {
+    "2020": 0.1642,
+    "2021": 0.3543,
+    "2022": -0.3878,
+    "2023": 0.4713,
+    "2024": 0.0409,
+    "2025": 0.5595,
+    "2026": 1.2023
+   },
+   "benchmark_yearly": {
+    "2020": 0.2923,
+    "2021": 0.2192,
+    "2022": -0.2137,
+    "2023": 0.2752,
+    "2024": 0.4864,
+    "2025": 0.3687,
+    "2026": 0.7482
+   }
+  }
+ },
+ "tolerance": {
+  "cagr": 0.001,
+  "max_drawdown": 0.001
+ }
+}

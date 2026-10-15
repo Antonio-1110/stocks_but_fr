@@ -50,9 +50,11 @@ Default capital assumption: NT$5M (configurable, not a trading authorisation).
 | All costs and strategy settings in `radar.toml` | One place to check assumptions | – |
 | Monthly revenue is used only after the 10th-of-month filing deadline | Never uses a figure before it was public | Real filing dates are collected |
 | Paper portfolios and alerts wait until a month's revenue covers 90% of listed stocks | A partial backfill isn't the market | – |
-| Paper and alert state in `state.db`, apart from market data; alerts sent only after it is saved | Rolling back data must not rewind trades or repeat alerts | The owner picks a private home for it |
+| Paper and alert state in `state.db`, apart from market data; alerts sent only after it is saved | Rolling back data must not rewind trades or repeat alerts | – |
+| The database and state live on a private release (decided 2026-10-15) | Paper trades and collected data aren't published | – |
+| No fill at a locked limit-up or limit-down open | A real account couldn't get those fills | – |
 | Every published snapshot passes `radar validate`; strategy results are judged against a pinned baseline | A bad collect can't silently publish, and a change that moves results is visible | – |
-| Agents work on `main`, one GitHub issue per change (AGENTS.md) | One owner, fast iteration | The owner says otherwise |
+| Agents work on `main`, one GitHub issue per change (AGENTS.md); confirmed 2026-10-15 | One owner, fast iteration | The owner says otherwise |
 
 ROADMAP.md says what is planned, deferred or cut, and is updated after each
 sprint.

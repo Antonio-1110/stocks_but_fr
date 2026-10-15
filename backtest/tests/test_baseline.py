@@ -1,6 +1,6 @@
-"""Regression test for the revenue momentum baseline (issue #50).
+"""Regression test for the strategy baselines (issues #50, #61).
 
-baselines/revenue_momentum.json records what the strategy returned on one
+Each baselines/<strategy>.json records what the strategy returned on one
 pinned data snapshot. This reruns it and fails if the result drifts, so a
 change to the engine, costs or strategy that moves the headline numbers is
 noticed and recorded as a new baseline rather than slipping in.
@@ -21,19 +21,20 @@ import pytest
 
 from radar_backtest import config, data, runner
 
-BASELINE = runner.BACKTEST_DIR / "baselines" / "revenue_momentum.json"
+BASELINES = sorted((runner.BACKTEST_DIR / "baselines").glob("*.json"))
 DB = os.environ.get("RADAR_BASELINE_DB")
 
 pytestmark = pytest.mark.skipif(not DB, reason="set RADAR_BASELINE_DB to the baseline snapshot to run")
 
 
-def test_revenue_momentum_matches_baseline():
-    want = json.loads(BASELINE.read_text())
+@pytest.mark.parametrize("baseline", BASELINES, ids=lambda p: p.stem)
+def test_matches_baseline(baseline):
+    want = json.loads(baseline.read_text())
     settings = dataclasses.replace(config.load(runner.BACKTEST_DIR.parent / "radar.toml"), db_path=Path(DB))
     snap, _ = data.snapshot(settings.db_path)
     assert snap == want["snapshot"]["id"], f"{DB} is snapshot {snap}, the baseline is {want['snapshot']['id']}"
 
-    md = data.load(settings.db_path)
+    md = data.load(settings.db_path, min_coverage=settings.min_coverage)
     out = runner.run(md, settings, runner.strategy_factory(want["strategy"], settings), report_dir=None, save=False)
     assert out["params"] == want["params"], "strategy parameters changed: record a new baseline"
     tol = want["tolerance"]
