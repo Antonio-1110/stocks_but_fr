@@ -16,7 +16,7 @@ def main() -> None:
     args = ap.parse_args()
 
     settings = config.load(args.config)
-    md = data.load(settings.db_path)
+    md = data.load(settings.db_path, min_coverage=settings.min_coverage)
     out = runner.run(md, settings, runner.strategy_factory(args.strategy, settings),
                      save=not args.no_save)
     for p in out["periods"]:

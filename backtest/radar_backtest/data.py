@@ -101,8 +101,12 @@ def _date(col: pd.Series) -> pd.Series:
     return pd.to_datetime(col.replace("", None), format="%Y-%m-%d")
 
 
-def load(db_path: str | Path, tickers: list[str] | None = None) -> MarketData:
-    """Load Taiwan data. `tickers` limits the price load (tests, quick runs)."""
+def load(db_path: str | Path, tickers: list[str] | None = None, min_coverage: float = 0.9) -> MarketData:
+    """Load Taiwan data. `tickers` limits the price load (tests, quick runs).
+
+    The newest day is dropped while it is only partly collected: fewer stocks
+    than `min_coverage` of the day before ([paper] min_coverage, issue #60).
+    Otherwise every held stock not yet collected would look delisted."""
     db_path = Path(db_path)
     if not db_path.exists():
         raise FileNotFoundError(f"{db_path} not found: run `radar collect` first")
@@ -132,6 +136,9 @@ def load(db_path: str | Path, tickers: list[str] | None = None) -> MarketData:
     prices["date"] = _date(prices["date"])
     # Suspended or broken rows: no usable close means no trade that day.
     prices = prices[prices["close"] > 0]
+    counts = prices.groupby("date").size().sort_index()
+    if len(counts) >= 2 and counts.iloc[-1] < min_coverage * counts.iloc[-2]:
+        prices = prices[prices["date"] < counts.index[-1]]
     # An open outside the day's low-high range can't have traded (FinMind has
     # tens of thousands of these on TWSE stocks): treat it like a missing open.
     bad_open = prices["high"].gt(0) & prices["low"].gt(0) & (

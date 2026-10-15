@@ -149,6 +149,18 @@ func TestSoftChecksDoNotBlock(t *testing.T) {
 	if counts["open outside the day's low-high range"] != 2 || counts["listed stocks with no revenue"] != 1 {
 		t.Errorf("soft checks %+v", m.Soft)
 	}
+
+	// A newest day only partly collected is reported (#60).
+	st.DB.Exec(`DELETE FROM prices WHERE ticker = '2330' AND date = '2026-10-08'`)
+	m, err = Validate(context.Background(), st.DB, "0050", day, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range m.Soft {
+		if c.Name == "newest price day fully collected" && (c.OK || c.Count != 1) {
+			t.Errorf("partial day check %+v", c)
+		}
+	}
 }
 
 func TestHealthPage(t *testing.T) {

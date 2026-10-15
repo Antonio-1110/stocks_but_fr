@@ -262,6 +262,31 @@ func (m *Manifest) soft(ctx context.Context, db *sql.DB, q queryFunc, now time.T
 		m.Soft = append(m.Soft, Check{Name: "revenue coverage " + c.Month, OK: c.Share >= 0.9, Count: c.Listed - c.Have,
 			Detail: fmt.Sprintf("%d of %d listed stocks (%.0f%%)", c.Have, c.Listed, c.Share*100)})
 	}
+	// The newest day fills in over several runs while prices are collected;
+	// paper and the backtester skip it until it is mostly there (#60).
+	var day, prevDay string
+	var have, had int64
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(date), '') FROM prices WHERE market = 'TW'`).Scan(&day); err != nil {
+		return err
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(date), '') FROM prices WHERE market = 'TW' AND date < ?`, day).Scan(&prevDay); err != nil {
+		return err
+	}
+	for _, x := range []struct {
+		d string
+		n *int64
+	}{{day, &have}, {prevDay, &had}} {
+		if err := q(x.n, `SELECT COUNT(*) FROM prices WHERE market = 'TW' AND date = ? AND close > 0`, x.d); err != nil {
+			return err
+		}
+	}
+	part := Check{Name: "newest price day fully collected", OK: had == 0 || float64(have) >= 0.9*float64(had),
+		Detail: fmt.Sprintf("%s has %d stocks, %s had %d", day, have, prevDay, had)}
+	if !part.OK {
+		part.Count = had - have
+	}
+	m.Soft = append(m.Soft, part)
+
 	bench := m.Latest["benchmark"]
 	c := Check{Name: "benchmark up to date", OK: bench >= now.AddDate(0, 0, -5).Format(dateLayout), Detail: "latest " + bench}
 	if !c.OK {

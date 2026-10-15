@@ -41,6 +41,7 @@ class Settings:
     max_adv_fraction: float
     adv_days: int
     min_trade_value: float
+    min_coverage: float = 0.9      # [paper] min_coverage: newest day counts once this share is collected
     limits: Limits | None = None   # None: fill at any open (no price-limit check)
     strategies: dict = field(default_factory=dict)  # raw [strategy.<name>] tables
     root: Path = Path(".")
@@ -71,6 +72,7 @@ def load(path: str | Path) -> Settings:
         max_adv_fraction=bt["max_adv_fraction"],
         adv_days=bt["adv_days"],
         min_trade_value=float(bt["min_trade_value"]),
+        min_coverage=float(raw.get("paper", {}).get("min_coverage", 0.9)),
         limits=_limits(raw.get("limits", {}).get("tw")),
         strategies=raw.get("strategy", {}),
         root=root,

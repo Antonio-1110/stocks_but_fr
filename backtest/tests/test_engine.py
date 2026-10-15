@@ -194,3 +194,16 @@ def test_open_outside_days_range_falls_back_to_close(db):
     day = pd.Timestamp("2020-01-02")
     assert md.open.at[day, "2222"] == md.close.at[day, "2222"] == 20.0
     assert md.adj_open.at[day, "2222"] == 20.0
+
+
+def test_partly_collected_last_day_is_dropped(db):
+    """Issue #60: a newest day with few stocks collected isn't a trading day yet."""
+    full = data.load(db)
+    last = full.calendar[-1].strftime("%Y-%m-%d")
+    con = sqlite3.connect(db)
+    con.execute("DELETE FROM prices WHERE ticker = '2222' AND date = ?", (last,))
+    con.commit()
+    con.close()
+    md = data.load(db)
+    assert md.calendar[-1] == full.calendar[-2]
+    assert data.load(db, min_coverage=0.5).calendar[-1] == full.calendar[-1]
