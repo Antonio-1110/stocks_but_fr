@@ -203,6 +203,8 @@ func updateUniverse(ctx context.Context, cfg config.Config, st *store.Store, c *
 		if delisted == nil && co.DelistedOn.IsZero() {
 			co.DelistedOn = prev[co.Ticker].DelistedOn
 		}
+		// Listing dates come from the tw-master step (issue #56).
+		co.ListedOn = prev[co.Ticker].ListedOn
 		if !co.DelistedOn.IsZero() {
 			nDelisted++
 		}

@@ -31,6 +31,7 @@ type step struct {
 // collectors run in order on `radar collect`. Each data issue adds its line here.
 var collectors = []step{
 	{"tw-prices", tw.Collect},       // fills the TW universe first
+	{"tw-master", tw.CollectMaster}, // listing dates and industry history; after prices (fallback dates)
 	{"tw-revenue", revenue.Collect}, // needs the TW universe in companies
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
 	{"tw-calendar", calendar.Collect},
