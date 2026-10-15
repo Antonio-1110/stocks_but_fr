@@ -136,6 +136,7 @@ func TestValidateBlocksBadData(t *testing.T) {
 func TestSoftChecksDoNotBlock(t *testing.T) {
 	st, _ := open(t)
 	st.DB.Exec(`UPDATE prices SET open = 20 WHERE ticker = '2330'`)
+	st.DB.Exec(`UPDATE prices SET open = 0 WHERE ticker = '0050'`) // stored "no open" (#57) isn't counted
 	st.DB.Exec(`INSERT INTO companies (market, ticker, name) VALUES ('TW', '1101', 'No revenue')`)
 	m, err := Validate(context.Background(), st.DB, "0050", day, "")
 	if err != nil {

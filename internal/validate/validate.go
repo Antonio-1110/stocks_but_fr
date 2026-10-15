@@ -240,7 +240,7 @@ func (m *Manifest) soft(ctx context.Context, db *sql.DB, q queryFunc, now time.T
 		args        []any
 	}{
 		{"open outside the day's low-high range",
-			`SELECT COUNT(*) FROM prices WHERE high > 0 AND low > 0 AND (open > high OR open < low)`, nil},
+			`SELECT COUNT(*) FROM prices WHERE open > 0 AND high > 0 AND low > 0 AND (open > high OR open < low)`, nil},
 		{"listed stocks with no price in 14 days",
 			`SELECT COUNT(*) FROM companies c WHERE ` + listedCommon + `
 			AND NOT EXISTS(SELECT 1 FROM prices p WHERE p.market = 'TW' AND p.ticker = c.ticker AND p.date >= ?)`,
