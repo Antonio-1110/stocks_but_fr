@@ -14,6 +14,19 @@
  },
  {
   "Date": "1151016",
+  "Code": "00851",
+  "Name": "台新全球AI",
+  "TradeVolume": "54013",
+  "TradeValue": "3748837",
+  "OpeningPrice": "69.25",
+  "HighestPrice": "69.65",
+  "LowestPrice": "69.00",
+  "ClosingPrice": "69.65",
+  "Change": "0.0000",
+  "Transaction": "128"
+ },
+ {
+  "Date": "1151016",
   "Code": "020011",
   "Name": "統一微波高息20N",
   "TradeVolume": "",

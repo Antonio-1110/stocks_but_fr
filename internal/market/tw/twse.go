@@ -21,6 +21,45 @@ import (
 // backfills, and fills in any stock this file can't extend cleanly.
 const twseDayAllURL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 
+// twseExURL lists recent and upcoming ex-dividend and ex-rights days. On an
+// ex-day STOCK_DAY_ALL reports a change of 0, so the reference price can't be
+// read from it; it comes from the cash dividend here instead.
+const twseExURL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
+
+type twseExRow struct {
+	Date         string `json:"Date"`
+	Code         string `json:"Code"`
+	StockRatio   string `json:"StockDividendRatio"`
+	Subscription string `json:"SubscriptionRatio"`
+	Cash         string `json:"CashDividend"`
+}
+
+// twseExDay is one stock's ex-day. Cash is set (cashOnly true) only for a
+// plain cash dividend, whose reference price is the last close minus it;
+// anything else (stock dividends, rights) is left to FinMind's figures.
+type twseExDay struct {
+	Cash     float64
+	CashOnly bool
+}
+
+func parseTWSEEx(body []byte, day time.Time) (map[string]twseExDay, error) {
+	var rows []twseExRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("TWSE TWT48U_ALL: %w", err)
+	}
+	out := map[string]twseExDay{}
+	for _, r := range rows {
+		if !rocDate(r.Date).Equal(day) {
+			continue
+		}
+		cash, ok := number(r.Cash)
+		stock, _ := number(r.StockRatio)
+		sub, _ := number(r.Subscription)
+		out[strings.TrimSpace(r.Code)] = twseExDay{Cash: cash, CashOnly: ok && cash > 0 && stock == 0 && sub == 0}
+	}
+	return out, nil
+}
+
 type twseDayRow struct {
 	Date    string `json:"Date"` // ROC, e.g. "1151016"
 	Code    string `json:"Code"`
@@ -34,9 +73,8 @@ type twseDayRow struct {
 	Trading string `json:"Transaction"`
 }
 
-// twseQuote is one stock's day from the file. Ref is the reference price the
-// exchange set for the day (close minus change): the previous close, or the
-// ex-rights price on an ex-dividend day.
+// twseQuote is one stock's day from the file. Ref is close minus change,
+// which is the previous close on an ordinary day.
 type twseQuote struct {
 	model.Price
 	Ref float64
@@ -100,11 +138,13 @@ func fetchTWSEDayAll(ctx context.Context, client *http.Client, url string) ([]by
 }
 
 // twseDay writes the file's day for every TWSE stock whose stored prices end
-// on the trading day before it, so nothing is skipped in between. A
-// reference price that differs from the stored close means an ex-dividend
-// (or ex-rights) day; it is stored as an event so adjusted closes are
-// rebuilt. Other stocks are left to FinMind. It returns how many it wrote.
-func twseDay(st *store.Store, d *dirtySet, day time.Time, quotes []twseQuote, now time.Time) (int, error) {
+// on the trading day before it, so nothing is skipped in between. On a plain
+// cash ex-dividend day (from ex, which may be nil if unavailable) the
+// event's ratio is (last close - cash) / last close, so adjusted closes are
+// rebuilt. A stock with any other ex-day, or whose close minus change
+// doesn't match its stored close, is left to FinMind, with its event check
+// reset so FinMind fetches its events this run. It returns how many it wrote.
+func twseDay(st *store.Store, d *dirtySet, day time.Time, quotes []twseQuote, ex map[string]twseExDay, now time.Time) (int, error) {
 	if len(quotes) == 0 {
 		return 0, nil
 	}
@@ -153,25 +193,37 @@ func twseDay(st *store.Store, d *dirtySet, day time.Time, quotes []twseQuote, no
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var prices []model.Price
 	var events []tickerEvent
+	var unsure []string
 	for _, q := range quotes {
 		l, ok := last[q.Ticker]
 		if !twse[q.Ticker] || !ok || l.date != prev.Format("2006-01-02") || l.close <= 0 {
 			continue
 		}
-		prices = append(prices, q.Price)
-		if math.Abs(q.Ref-l.close) > 0.005 && q.Ref > 0 {
+		e, isEx := ex[q.Ticker]
+		switch {
+		case isEx && e.CashOnly && e.Cash < l.close:
 			events = append(events, tickerEvent{Ticker: q.Ticker, Kind: kindDividend,
-				adjEvent: adjEvent{Date: day, Ratio: q.Ref / l.close}})
+				adjEvent: adjEvent{Date: day, Ratio: (l.close - e.Cash) / l.close}})
+		case isEx || math.Abs(q.Ref-l.close) > 0.005:
+			unsure = append(unsure, q.Ticker)
+			continue
 		}
+		prices = append(prices, q.Price)
 	}
 	if err := writeEvents(st, d, events, today); err != nil {
 		return 0, err
 	}
+	for _, t := range unsure {
+		if _, err := st.DB.Exec(`DELETE FROM tw_event_checks WHERE ticker = ?`, t); err != nil {
+			return 0, err
+		}
+	}
 	if err := writeRaw(st, d, prices); err != nil {
 		return 0, err
 	}
-	if len(events) > 0 {
-		log.Printf("tw: TWSE %s: %d ex-rights days from reference prices", day.Format("2006-01-02"), len(events))
+	if len(events)+len(unsure) > 0 {
+		log.Printf("tw: TWSE %s: %d cash ex-dividend days stored; %d other ex-days or price mismatches left to FinMind %v",
+			day.Format("2006-01-02"), len(events), len(unsure), unsure)
 	}
 	return len(prices), nil
 }
@@ -213,7 +265,7 @@ func previousTradingDay(st *store.Store, day time.Time) (time.Time, bool, error)
 
 // twseURL is a variable so tests can point it at a local server (or turn it
 // off with "").
-var twseURL = twseDayAllURL
+var twseURL, twseExListURL = twseDayAllURL, twseExURL
 
 // twseLatest fetches the file and applies it. Any failure is logged and
 // leaves the TWSE stocks to FinMind for this run.
@@ -235,7 +287,14 @@ func twseLatest(ctx context.Context, st *store.Store, d *dirtySet, now time.Time
 		log.Printf("tw: TWSE daily file dated %s, after today; ignored", day.Format("2006-01-02"))
 		return
 	}
-	n, err := twseDay(st, d, day, quotes, now)
+	var ex map[string]twseExDay
+	if body, err := fetchTWSEDayAll(ctx, &http.Client{Timeout: 60 * time.Second}, twseExListURL); err != nil {
+		log.Printf("tw: TWSE ex-dividend list unavailable; ex-days are left to FinMind: %v", err)
+	} else if ex, err = parseTWSEEx(body, day); err != nil {
+		log.Printf("tw: %v; ex-days are left to FinMind", err)
+		ex = nil
+	}
+	n, err := twseDay(st, d, day, quotes, ex, now)
 	if err != nil {
 		log.Printf("tw: TWSE %s: %v", day.Format("2006-01-02"), err)
 		return

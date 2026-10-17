@@ -1,0 +1,44 @@
+[
+ {
+  "Date": "1151016",
+  "Code": "00851",
+  "Name": "台新全球AI",
+  "Exdividend": "息",
+  "StockDividendRatio": "",
+  "SubscriptionRatio": "",
+  "SubscriptionPricePerShare": "",
+  "CashDividend": "2.500000",
+  "SharesOffered": "",
+  "SharesEmpOwner": "",
+  "SharesholderOwner": "",
+  "StockHoldingRatio": ""
+ },
+ {
+  "Date": "1151016",
+  "Code": "00904",
+  "Name": "台新臺灣半導體30",
+  "Exdividend": "息",
+  "StockDividendRatio": "",
+  "SubscriptionRatio": "",
+  "SubscriptionPricePerShare": "",
+  "CashDividend": "2.200000",
+  "SharesOffered": "",
+  "SharesEmpOwner": "",
+  "SharesholderOwner": "",
+  "StockHoldingRatio": ""
+ },
+ {
+  "Date": "1151020",
+  "Code": "1711",
+  "Name": "永光",
+  "Exdividend": "權",
+  "StockDividendRatio": "",
+  "SubscriptionRatio": "0.09128214",
+  "SubscriptionPricePerShare": "34.0000",
+  "CashDividend": "0",
+  "SharesOffered": "5000000.00",
+  "SharesEmpOwner": "5000000.00",
+  "SharesholderOwner": "40000000.00",
+  "StockHoldingRatio": "73.02571874"
+ }
+]
