@@ -72,9 +72,8 @@ and point-in-time for listings, and both strategies have pinned baselines
 
 1. Private database: **done 2026-10-17** (#62, #63). The `data` release lives on
    the private `stocks_but_fr-data` repo; the public release is deleted.
-2. Stuck sells (#58): a paper sell stays pending for good if the stock is
-   suspended the day after the signal; the backtester drops a sell on a day with
-   no price.
+2. Stuck sells: **done 2026-10-17** (#58). A sell on a day the stock doesn't
+   trade waits for its next open, in paper and in the backtester.
 3. Keep revenue revisions instead of overwriting them (§8.3).
 
 Known limits, not scheduled: cycle bottom uses each company's current industry
