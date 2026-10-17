@@ -123,6 +123,7 @@ type order struct {
 	Note                 string
 	changed              bool
 	waited               int // opens it waited out at limit-down (sells, this run)
+	halted               int // trading days it waited out with no trade (sells, this run)
 }
 
 // book is one portfolio's state, loaded, changed in memory, then saved.
@@ -250,7 +251,8 @@ func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now
 }
 
 // fill executes pending orders whose next trading day is in the window, in
-// day order, sells first. A sell moves past opens locked at limit-down.
+// day order, sells first. A sell moves past opens locked at limit-down and
+// days the stock didn't trade (#58), to the first open it can be sold at.
 func fill(m *market, b *book, costs config.TWCosts, lim config.TWLimits) {
 	type job struct {
 		o   *order
@@ -263,11 +265,23 @@ func fill(m *market, b *book, costs config.TWCosts, lim config.TWLimits) {
 		}
 		d := m.after(o.SignalDate)
 		if o.Side == "sell" {
-			for o.waited = 0; d != "" && m.locked(lim, o.Ticker, d) < 0; d = m.after(d) {
-				o.waited++
+			first := d
+			for o.waited, o.halted = 0, 0; d != ""; d = m.after(d) {
+				if px, ok := m.on(o.Ticker, d); !ok || px.open <= 0 {
+					o.halted++
+				} else if m.locked(lim, o.Ticker, d) < 0 {
+					o.waited++
+				} else {
+					break
+				}
 			}
-			if d == "" && o.waited > 0 {
-				log.Printf("paper: %s: sell %s waits: opened at limit-down %d day(s) so far", b.Name, o.Ticker, o.waited)
+			if d == "" && first != "" {
+				if m.sinceLast(o.Ticker) >= staleDays {
+					d = m.last() // stopped trading: sell() takes the last close
+				} else {
+					log.Printf("paper: %s: sell %s waits: %d day(s) at limit-down, %d with no trade so far",
+						b.Name, o.Ticker, o.waited, o.halted)
+				}
 			}
 		}
 		if d != "" {
@@ -308,8 +322,15 @@ func sell(m *market, b *book, o *order, day string, costs config.TWCosts) {
 		}
 		price = px.close
 		o.Note = "no trades since " + px.date + ", sold at its last close"
-	} else if o.waited > 0 {
-		o.Note = fmt.Sprintf("opened at limit-down %d day(s), sold at the next open", o.waited)
+	} else if o.waited > 0 || o.halted > 0 {
+		var why []string
+		if o.waited > 0 {
+			why = append(why, fmt.Sprintf("opened at limit-down %d day(s)", o.waited))
+		}
+		if o.halted > 0 {
+			why = append(why, fmt.Sprintf("didn't trade %d day(s)", o.halted))
+		}
+		o.Note = strings.Join(why, ", ") + ", sold at the next open"
 	}
 	opened, ok := m.exact(o.Ticker, p.Opened)
 	if !ok {

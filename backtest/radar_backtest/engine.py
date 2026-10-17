@@ -12,8 +12,9 @@ Rules, so results stay comparable and honest:
 - Liquidity: a buy may not take a position above max_adv_fraction of its
   average traded value over the adv_days before the signal. The rest stays cash.
 - A held stock that stops trading (delisted) is sold at its last traded price.
-- A stock with no price on the fill day (suspended) is skipped; the order is
-  counted in skipped_orders and the next signal can try again.
+- A buy of a stock with no price on the fill day (suspended) is skipped and
+  counted in skipped_orders. A sell waits for the first open the stock trades
+  (#58), like a sell at limit-down, until it fills or a new signal replaces it.
 - Price limits ([limits.tw], issue #53): an open locked at limit-up can't be
   bought, so that buy is skipped; an open locked at limit-down can't be sold
   into, so that sell waits for the next open, and the next, until it fills or
@@ -218,8 +219,12 @@ class Engine:
         self._res.limit_blocked += 1
         self._res.log.append(f"{day.date()} {ticker}: opened at limit-down, sell waits for the next open")
 
+    def _wait_sell(self, day, ticker: str, units: float | None) -> None:
+        self._deferred[ticker] = units
+        self._res.log.append(f"{day.date()} {ticker}: no trade today, sell waits for the next open")
+
     def _retry_sells(self, day) -> None:
-        """Sells that waited out a limit-down open try again at this open."""
+        """Sells that waited out a limit-down open or a halt try again at this open."""
         opens = self.data.adj_open.loc[day]
         for t, units in list(self._deferred.items()):
             del self._deferred[t]
@@ -258,7 +263,10 @@ class Engine:
             if abs(delta) < 1e-6 or (target > 0 and abs(delta) < min_trade):
                 continue
             if t not in tradable:
-                self._res.skipped_orders += 1
+                if delta < 0 and t in self._pos:
+                    self._wait_sell(day, t, None if target == 0 else -delta / self.marks.at[day, t])
+                else:
+                    self._res.skipped_orders += 1
                 continue
             lock = self._locked(day, t)
             if delta < 0 and lock < 0:

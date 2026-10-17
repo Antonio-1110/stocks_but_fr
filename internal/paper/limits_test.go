@@ -107,3 +107,37 @@ func TestExDividendOpenIsNotLimitDown(t *testing.T) {
 		t.Errorf("sell %s on %s (%s), want filled on the ex-dividend day", status, fillDate, note)
 	}
 }
+
+// Issue #58: a sell whose first day after the signal is a trading halt fills
+// at the first open the stock trades again, instead of waiting forever.
+func TestSellWaitsOutAHalt(t *testing.T) {
+	st := openStore(t)
+	cfg := config.Default()
+	cfg.Paper.MinCoverage = 0 // a two-stock market: one halted stock isn't a partly collected day
+	s := script{
+		"2026-10-01": {{Ticker: "1111", Side: "buy", Target: 100_000, Reason: "test"}},
+		"2026-10-02": {{Ticker: "1111", Side: "sell", Reason: "stop"}},
+	}
+	steps := [][]model.Price{
+		{price("1111", "2026-10-01", 100, 100, 100), price("0050", "2026-10-01", 50, 50, 50)},
+		{price("1111", "2026-10-02", 100, 100, 100), price("0050", "2026-10-02", 50, 50, 50)}, // buy fills, sell signalled
+		{price("0050", "2026-10-05", 50, 50, 50)},                                             // 1111 halted: waits
+		{price("0050", "2026-10-06", 50, 50, 50)},                                             // still halted
+		{price("1111", "2026-10-07", 95, 96, 96), price("0050", "2026-10-07", 50, 50, 50)},    // trades again: fills
+		{price("1111", "2026-10-08", 97, 97, 97), price("0050", "2026-10-08", 50, 50, 50)},
+	}
+	for i, rows := range steps {
+		must(t, st.UpsertPrices(rows))
+		runOnce(t, st, cfg, s)
+		if i == 0 {
+			continue
+		}
+		status, fillDate, px, note := orderRow(t, st, "sell")
+		if i < 4 && status != "pending" {
+			t.Fatalf("step %d: sell %s on %s at %v, want still pending", i, status, fillDate, px)
+		}
+		if i >= 4 && (status != "filled" || fillDate != "2026-10-07" || px != 95 || !strings.Contains(note, "didn't trade 2 day")) {
+			t.Errorf("step %d: sell %s on %s at %v (%s), want filled 2026-10-07 at 95 after 2 halted days", i, status, fillDate, px, note)
+		}
+	}
+}
