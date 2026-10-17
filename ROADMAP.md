@@ -78,11 +78,11 @@ private and point-in-time for listings and revenue, and both strategies have pin
    figure; a different later figure goes to `tw_revenue_revisions` with the date
    it was first seen.
 
-**Sprint 4 (proposed): current data on time, then the DCA test**
+**Sprint 4 (in progress): current data on time, then the DCA test**
 
-1. #24: the day's prices from TWSE and TPEx in one request each, with FinMind
-   kept for backfill. Today TWSE prices arrive over several hourly runs, so the
-   newest day is often half collected and paper waits for it.
+1. #24: **done 2026-10-17**. TWSE's latest day comes from its open data file
+   (one request, about 1,300 stocks); TPEx already came from its daily files.
+   FinMind backfills and covers stocks the file can't extend cleanly.
 2. #20: apply the limit and halt rules to the averaging-down strategy, then run
    its real-data report (variants as described and capped).
 
