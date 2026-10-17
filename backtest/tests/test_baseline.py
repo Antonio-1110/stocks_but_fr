@@ -6,7 +6,7 @@ change to the engine, costs or strategy that moves the headline numbers is
 noticed and recorded as a new baseline rather than slipping in.
 
 It needs the snapshot file (400 MB, not in CI):
-    gh release download data --pattern radar-2026-10-15.db.gz && gunzip radar-2026-10-15.db.gz
+    gh release download data -R Antonio-1110/stocks_but_fr-data --pattern radar-2026-10-15.db.gz && gunzip radar-2026-10-15.db.gz
     RADAR_BASELINE_DB=$PWD/radar-2026-10-15.db python -m pytest tests/test_baseline.py
 """
 

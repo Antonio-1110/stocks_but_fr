@@ -2,9 +2,10 @@
 # publish public/ to GitHub Pages.
 #
 # The database lives between runs as an asset on a release tagged `data`
-# (not in git, so history doesn't grow; each run replaces the one asset).
-# Anyone can download it there to run the backtester locally:
-#   gh release download data --pattern radar.db.gz && gunzip radar.db.gz
+# (not in git, so history doesn't grow; each run replaces the one asset). The
+# release is on a private repo, DATA_REPO (default: this repo's name plus
+# -data), reached with the DATA_TOKEN secret (#62). To download it:
+#   gh release download data -R <owner>/stocks_but_fr-data --pattern radar.db.gz
 #
 # Pages must be set to deploy from Actions once, by hand:
 #   Settings > Pages > Build and deployment > Source: GitHub Actions
@@ -45,12 +46,40 @@ jobs:
     # Each collector paces FinMind for up to about an hour per run.
     timeout-minutes: 300
     permissions:
-      contents: write   # create the `data` release and replace its asset
+      contents: read    # the release lives on DATA_REPO, written with DATA_TOKEN
       actions: write    # start the next run while a backfill is incomplete
     env:
-      GH_TOKEN: ${{ github.token }}
+      # gh release commands go to the private data repo (#62).
+      GH_TOKEN: ${{ secrets.DATA_TOKEN }}
+      GH_REPO: ${{ vars.DATA_REPO || format('{0}-data', github.repository) }}
+      # The release this repo kept before #62, read once to move the data over.
+      OLD_REPO: ${{ github.repository }}
+      OLD_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+
+      # Never save to a repo anyone can read: stop if the token is missing or
+      # the data repo is public. An empty repo gets a README, since a release
+      # needs a commit to tag.
+      - name: Check data repo
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The DATA_TOKEN secret is not set. See README \"Environment variables\"."
+            exit 1
+          fi
+          if ! private=$(gh api "repos/$GH_REPO" -q .private); then
+            echo "::error::Can't reach $GH_REPO with DATA_TOKEN. Check the repo name (variable DATA_REPO) and the token's access."
+            exit 1
+          fi
+          if [ "$private" != "true" ]; then
+            echo "::error::$GH_REPO is public; the data release must be private."
+            exit 1
+          fi
+          if ! gh api "repos/$GH_REPO/commits?per_page=1" >/dev/null 2>&1; then
+            echo "$GH_REPO is empty; adding a README so it can hold a release"
+            gh api -X PUT "repos/$GH_REPO/contents/README.md" -f message="Data release for $OLD_REPO" \
+              -f content="$(printf '# Data for %s\n\nThe `data` release holds the database, written by its daily workflow.\n' "$OLD_REPO" | base64 -w0)" >/dev/null
+          fi
 
       - uses: actions/setup-go@v5
         with:
@@ -61,17 +90,26 @@ jobs:
 
       # A missing release means this is the first run: start empty. A release
       # whose download fails stops the job, so a fresh empty database never
-      # replaces the real one.
+      # replaces the real one. Until the data repo has its release, the copy
+      # on this repo's old release is the one restored (#62).
       - name: Restore database
         run: |
           mkdir -p data
           if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
-            if grep -q "release not found" <<<"$assets"; then
-              echo "No '$DATA_TAG' release yet; starting with an empty database"
-              exit 0
+            if ! grep -q "release not found" <<<"$assets"; then
+              echo "$assets"
+              exit 1
             fi
-            echo "$assets"
-            exit 1
+            export GH_TOKEN="$OLD_TOKEN" GH_REPO="$OLD_REPO"
+            if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
+              if grep -q "release not found" <<<"$assets"; then
+                echo "No '$DATA_TAG' release yet; starting with an empty database"
+                exit 0
+              fi
+              echo "$assets"
+              exit 1
+            fi
+            echo "Moving the database over from $OLD_REPO"
           fi
           # .new is left behind only if a previous save stopped halfway. It
           # was uploaded after validation passed, so it is the newest good
@@ -96,7 +134,10 @@ jobs:
       # silently starting the portfolios over.
       - name: Restore state
         run: |
-          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[].name' 2>/dev/null || true)
+          if ! gh release view "$DATA_TAG" >/dev/null 2>&1; then
+            export GH_TOKEN="$OLD_TOKEN" GH_REPO="$OLD_REPO"   # first run on the data repo (#62)
+          fi
+          assets=$(gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[].name' 2>/dev/null || true)
           for name in "$STATE_ASSET.new" "$STATE_ASSET"; do
             if grep -qxF "$name" <<<"$assets"; then
               gh release download "$DATA_TAG" --pattern "$name" --output data/state.db.gz
@@ -157,21 +198,21 @@ jobs:
           # GitHub answers the odd release call with a 5xx; retry (#49).
           retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
           # A DELETE that errored but went through leaves nothing to retry.
-          del_asset() { retry gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$1" || ! gh api "repos/$GITHUB_REPOSITORY/releases/assets/$1" >/dev/null 2>&1; }
+          del_asset() { retry gh api -X DELETE "repos/$GH_REPO/releases/assets/$1" || ! gh api "repos/$GH_REPO/releases/assets/$1" >/dev/null 2>&1; }
           gzip -c data/state.db > "$STATE_ASSET.new"
           gzip -c data/radar.db > "$DB_ASSET.new"
           ls -lh data/radar.db "$DB_ASSET.new"
           if ! gh release view "$DATA_TAG" >/dev/null 2>&1; then
             gh release create "$DATA_TAG" --prerelease --title "Data snapshot" \
-              --notes "Latest data/radar.db, replaced by the daily workflow. Not a software release."
+              --notes "Latest data/radar.db and state.db for $OLD_REPO, replaced by its daily workflow. Not a software release."
           fi
           asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
-          rename() { retry gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$1" -f name="$2" >/dev/null; }
+          rename() { retry gh api -X PATCH "repos/$GH_REPO/releases/assets/$1" -f name="$2" >/dev/null; }
           # State first (#46): if the run stops before the database swap, the
           # next run restores the older database with this state, which is
           # safe; the other way round could leave moved tables in neither.
           retry gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
-          assets=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          assets=$(retry gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
           old=$(asset_id "$STATE_ASSET")
           if [ -n "$old" ]; then
             prev=$(asset_id "$STATE_PREV")
@@ -190,7 +231,7 @@ jobs:
           # this run replaces becomes $PREV_ASSET (one run back), and the first
           # run of each Taipei day also keeps a dated copy for a week. To roll
           # back, see README "Daily run".
-          assets=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          assets=$(retry gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
           old=$(asset_id "$DB_ASSET")
           if [ -n "$old" ]; then
             prev=$(asset_id "$PREV_ASSET")
@@ -218,6 +259,23 @@ jobs:
             fi
           done <<<"$assets"
 
+      # Snapshots a baseline names (#52) are copied from the old release once,
+      # so they stay downloadable on the data repo (#62).
+      - name: Copy pinned snapshots
+        run: |
+          have=$(gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[].name')
+          old=$(GH_TOKEN="$OLD_TOKEN" gh api "repos/$OLD_REPO/releases/tags/$DATA_TAG" -q '.assets[].name' 2>/dev/null || true)
+          for name in $(jq -r '.snapshot.asset // empty' backtest/baselines/*.json | sort -u); do
+            if grep -qxF "$name" <<<"$have" || ! grep -qxF "$name" <<<"$old"; then
+              continue
+            fi
+            echo "Copying $name from $OLD_REPO"
+            mkdir -p pinned
+            GH_TOKEN="$OLD_TOKEN" gh release download "$DATA_TAG" -R "$OLD_REPO" --pattern "$name" --dir pinned
+            gh release upload "$DATA_TAG" "pinned/$name"
+            rm "pinned/$name"
+          done
+
       # Telegram goes out only now that the state with the queued alerts is
       # saved, so a failed save can't lead to the same alert twice (#47).
       # Then the state is saved again so the sent marks stick; that upload
@@ -243,16 +301,16 @@ jobs:
           # GitHub answers the odd release call with a 5xx; retry (#49).
           retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
           # A DELETE that errored but went through leaves nothing to retry.
-          del_asset() { retry gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$1" || ! gh api "repos/$GITHUB_REPOSITORY/releases/assets/$1" >/dev/null 2>&1; }
+          del_asset() { retry gh api -X DELETE "repos/$GH_REPO/releases/assets/$1" || ! gh api "repos/$GH_REPO/releases/assets/$1" >/dev/null 2>&1; }
           gzip -c data/state.db > "$STATE_ASSET.new"
           retry gh release upload "$DATA_TAG" "$STATE_ASSET.new" --clobber
-          assets=$(retry gh api "repos/$GITHUB_REPOSITORY/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
+          assets=$(retry gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[] | "\(.id) \(.name)"')
           asset_id() { awk -v n="$1" '$2 == n { print $1 }' <<<"$assets"; }
           old=$(asset_id "$STATE_ASSET")
           if [ -n "$old" ]; then
             del_asset "$old"
           fi
-          retry gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$(asset_id "$STATE_ASSET.new")" -f name="$STATE_ASSET" >/dev/null
+          retry gh api -X PATCH "repos/$GH_REPO/releases/assets/$(asset_id "$STATE_ASSET.new")" -f name="$STATE_ASSET" >/dev/null
 
       # GitHub starts few of the hourly scheduled runs, so while a backfill is
       # incomplete each run starts the next one. The `daily` group keeps at
@@ -260,6 +318,9 @@ jobs:
       # under the hourly limit across back-to-back runs. Chaining stops once no
       # collector reports work left.
       - name: Start the next run if a backfill is incomplete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           if grep -qE 'FinMind: stopping:|budget or quota reached|TPEx: fetched [0-9]+ days, [1-9][0-9]* left' collect.log; then
             echo "Backfill incomplete; starting the next run"

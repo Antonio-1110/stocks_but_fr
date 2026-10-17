@@ -20,11 +20,12 @@ Contributors (human or agent): read [AGENTS.md](AGENTS.md) first.
 `.github/workflows/daily.yml` runs `radar collect` and `radar render` every
 hour (so evening runs pick up the day's close) (and on demand from the Actions tab), then publishes
 `public/` to GitHub Pages. The database is kept between runs as the
-`radar.db.gz` asset on the `data` release. `.github/workflows/publish.yml`
+`radar.db.gz` asset on the `data` release of a private repo,
+`Antonio-1110/stocks_but_fr-data` (#62). `.github/workflows/publish.yml`
 re-renders from that database and republishes on every push to `main`, so
 site changes go live in minutes. Download the database to backtest locally:
 
-    gh release download data --pattern radar.db.gz --dir data && gunzip data/radar.db.gz
+    gh release download data -R Antonio-1110/stocks_but_fr-data --pattern radar.db.gz --dir data && gunzip data/radar.db.gz
 
 The release also keeps `radar.prev.db.gz` (the copy before the latest run) and
 `radar-YYYY-MM-DD.db.gz` (the first run of each of the last 7 Taipei days). To
@@ -71,5 +72,9 @@ Every new one gets listed here.
   or `.env` on the Pi). Optional; without them alerts are only logged. Rules
   are set in `radar.toml` under `[alerts]`. `radar collect` only queues
   alerts; `radar notify` sends them, after the state is saved.
+- `DATA_TOKEN`: Actions secret, a fine-grained token with Contents read and
+  write on the private data repo. Required: without it the daily run stops.
+- `DATA_REPO`: Actions variable naming the data repo. Optional; the default is
+  this repo's name plus `-data`.
 
 Not financial advice.

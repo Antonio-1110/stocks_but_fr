@@ -4,7 +4,7 @@ The reference result for `cycle_bottom` (issues #55, #61). Later changes are jud
 against it, and `tests/test_baseline.py` fails if a rerun drifts from it.
 
 - **Data:** snapshot `2026-10-14T19:10:02Z`, collected by commit `4398a29`. The file is
-  `radar-2026-10-15.db.gz` on the `data` release (gz sha256 `5854cbf9017f39f5…`). The daily
+  `radar-2026-10-15.db.gz` on the private data repo's `data` release (gz sha256 `5854cbf9017f39f5…`). The daily
   cleanup keeps any snapshot a baseline names. Revenue covers 99.4% of listed
   stocks for 2026-09 and 99.8% for 2026-08. The file has 7,364,869 price rows and
   343,093 revenue rows.
@@ -68,5 +68,5 @@ with a worst drop of -46.9% against -34.0% for 0050, and turnover of about
 
 ## Reproduce
 
-    gh release download data --pattern radar-2026-10-15.db.gz && gunzip radar-2026-10-15.db.gz
+    gh release download data -R Antonio-1110/stocks_but_fr-data --pattern radar-2026-10-15.db.gz && gunzip radar-2026-10-15.db.gz
     cd backtest && RADAR_BASELINE_DB=$PWD/../radar-2026-10-15.db python -m pytest tests/test_baseline.py

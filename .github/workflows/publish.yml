@@ -27,7 +27,11 @@ jobs:
     permissions:
       contents: read
     env:
-      GH_TOKEN: ${{ github.token }}
+      # The release lives on the private data repo (#62), like in daily.yml.
+      GH_TOKEN: ${{ secrets.DATA_TOKEN }}
+      GH_REPO: ${{ vars.DATA_REPO || format('{0}-data', github.repository) }}
+      OLD_REPO: ${{ github.repository }}
+      OLD_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +47,12 @@ jobs:
       - name: Download database
         run: |
           mkdir -p data
+          # Until daily.yml has moved the data (#62), read this repo's old release.
+          if [ -z "$GH_TOKEN" ] || ! gh release view "$DATA_TAG" >/dev/null 2>&1; then
+            echo "GH_TOKEN=$OLD_TOKEN" >> "$GITHUB_ENV"
+            echo "GH_REPO=$OLD_REPO" >> "$GITHUB_ENV"
+            export GH_TOKEN="$OLD_TOKEN" GH_REPO="$OLD_REPO"
+          fi
           if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
             if grep -q "release not found" <<<"$assets"; then
               echo "No '$DATA_TAG' release yet; rendering an empty site"
