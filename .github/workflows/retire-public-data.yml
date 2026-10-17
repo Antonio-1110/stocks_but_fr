@@ -1,0 +1,76 @@
+# One-off (#63): move what's left of this repo's public `data` release to the
+# private data repo, then delete the public release. Run by hand; removed once
+# it has run.
+
+name: retire-public-data
+
+on:
+  workflow_dispatch:
+
+env:
+  DATA_TAG: data
+
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    # Never alongside a daily run, which writes the private release.
+    concurrency:
+      group: daily
+      cancel-in-progress: false
+    permissions:
+      contents: write   # delete this repo's release
+    env:
+      GH_TOKEN: ${{ secrets.DATA_TOKEN }}
+      GH_REPO: ${{ vars.DATA_REPO || format('{0}-data', github.repository) }}
+      OLD_REPO: ${{ github.repository }}
+      OLD_TOKEN: ${{ github.token }}
+    steps:
+      - name: Copy missing snapshots
+        run: |
+          [ "$(gh api "repos/$GH_REPO" -q .private)" = "true" ] || { echo "::error::$GH_REPO is not private"; exit 1; }
+          have=$(gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[].name')
+          old=$(GH_TOKEN="$OLD_TOKEN" gh api "repos/$OLD_REPO/releases/tags/$DATA_TAG" -q '.assets[].name')
+          mkdir -p move
+          for name in $(grep -E '^radar-[0-9]{4}-[0-9]{2}-[0-9]{2}\.db\.gz$' <<<"$old"); do
+            if grep -qxF "$name" <<<"$have"; then
+              continue
+            fi
+            echo "Copying $name"
+            GH_TOKEN="$OLD_TOKEN" gh release download "$DATA_TAG" -R "$OLD_REPO" --pattern "$name" --dir move
+            gh release upload "$DATA_TAG" "move/$name"
+            echo "$name $(stat -c %s "move/$name")" >> copied.txt
+            rm "move/$name"
+          done
+
+      # Nothing is deleted unless every public snapshot is on the private
+      # release (each one copied here with the same size), and the private
+      # release has the live database and state. A dated snapshot the private
+      # release already had is its own, newer copy of that day.
+      - name: Check the private release
+        run: |
+          priv=$(gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[] | "\(.name) \(.size)"')
+          old=$(GH_TOKEN="$OLD_TOKEN" gh api "repos/$OLD_REPO/releases/tags/$DATA_TAG" -q '.assets[] | "\(.name) \(.size)"')
+          echo "Private release:"; echo "$priv"
+          ok=1
+          for name in radar.db.gz state.db.gz manifest.json; do
+            grep -q "^$name " <<<"$priv" || { echo "::error::private release lacks $name"; ok=0; }
+          done
+          while read -r name size; do
+            if [[ $name =~ ^radar-[0-9]{4}-[0-9]{2}-[0-9]{2}\.db\.gz$ ]] && ! grep -q "^$name " <<<"$priv"; then
+              echo "::error::$name is not on the private release"
+              ok=0
+            fi
+          done <<<"$old"
+          touch copied.txt
+          while read -r name size; do
+            grep -qxF "$name $size" <<<"$priv" || { echo "::error::$name on the private release isn't $size bytes"; ok=0; }
+          done < copied.txt
+          [ "$ok" = 1 ]
+
+      - name: Delete the public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete "$DATA_TAG" --cleanup-tag --yes
+          echo "Deleted the public '$DATA_TAG' release and tag"
