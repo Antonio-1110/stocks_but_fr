@@ -41,8 +41,9 @@ const eventCheckDays = 7
 
 // Collect is the `radar collect` step. OTC (TPEx) stocks come from TPEx's
 // whole-market daily files, one request per day for every stock. TWSE blocks
-// cloud addresses after a request or two, so TWSE-listed stocks still come
-// from FinMind, one stock at a time. Both run at once, then adjusted closes
+// cloud addresses after a request or two on its main site, so TWSE-listed
+// stocks come from FinMind, one stock at a time, except that the latest day
+// comes from TWSE's open data file when it extends a stock cleanly (#24). Both run at once, then adjusted closes
 // are rebuilt where events or backfilled days changed them.
 func Collect(ctx context.Context, cfg config.Config, st *store.Store) error {
 	// Revenue and flows run after this step and share the FinMind budget.
@@ -72,6 +73,10 @@ func collect(ctx context.Context, cfg config.Config, st *store.Store, c *FinMind
 	} else if err := writeEvents(st, dirty, splitEvents(rows), today); err != nil {
 		return err
 	}
+
+	// TWSE's whole-market file for the latest day, before FinMind spends its
+	// budget on stocks the file already brings up to date (#24).
+	twseLatest(ctx, st, dirty, now)
 
 	var wg sync.WaitGroup
 	var tpexErr error
