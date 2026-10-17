@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -246,5 +247,65 @@ func TestQuotaStopsRun(t *testing.T) {
 	}
 	if n := calls.Load(); n != 1 {
 		t.Errorf("requests = %d, want 1", n)
+	}
+}
+
+// Issue #64: a month already stored keeps its figure; a different figure in
+// a later response is recorded as a revision, once.
+func TestRevisionsAreRecordedNotOverwritten(t *testing.T) {
+	fixture := readFixture(t, "finmind_2330.json")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(fixture) }))
+	defer srv.Close()
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "radar.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.UpsertCompanies([]model.Company{{Market: model.MarketTW, Ticker: "2330", Name: "台積電"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Stored earlier: Jan 2024 as first published (the sample has 215785127000
+	// now), and Feb 2023 the same as the sample.
+	err = st.UpsertMonthlyRevenue([]model.MonthlyRevenue{
+		{Market: model.MarketTW, Ticker: "2330", Month: month(2023, 2), Revenue: 163174097000, AnnouncedOn: month(2023, 3).AddDate(0, 0, 9)},
+		{Market: model.MarketTW, Ticker: "2330", Month: month(2024, 1), Revenue: 215000000000, AnnouncedOn: month(2024, 2).AddDate(0, 0, 9)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := collector{st: st, finmind: &tw.FinMind{BaseURL: srv.URL, Budget: 10, HTTP: srv.Client()},
+		cacheDir: filepath.Join(dir, "cache"), start: month(2023, 1), now: time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)}
+	for i := 0; i < 2; i++ {
+		// A run, then the same response again: the stale ticker refetches.
+		st.DB.Exec(`DELETE FROM monthly_revenue WHERE month = '2024-02-01'`)
+		if err := c.run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var jan float64
+	st.DB.QueryRow(`SELECT revenue FROM monthly_revenue WHERE ticker = '2330' AND month = '2024-01-01'`).Scan(&jan)
+	if jan != 215000000000 {
+		t.Errorf("Jan 2024 revenue %.0f, want the stored 215000000000 kept", jan)
+	}
+	var feb sql.NullFloat64
+	st.DB.QueryRow(`SELECT revenue FROM monthly_revenue WHERE ticker = '2330' AND month = '2024-02-01'`).Scan(&feb)
+	if !feb.Valid {
+		t.Errorf("Feb 2024, a new month, not stored")
+	}
+	rows, err := st.DB.Query(`SELECT month, stored_revenue, new_revenue, seen_on FROM tw_revenue_revisions`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var m, seen string
+		var was, now float64
+		rows.Scan(&m, &was, &now, &seen)
+		got = append(got, fmt.Sprintf("%s %.0f→%.0f %s", m, was, now, seen))
+	}
+	if want := "2024-01-01 215000000000→215785127000 2024-03-15"; len(got) != 1 || got[0] != want {
+		t.Errorf("revisions %v, want just %q", got, want)
 	}
 }

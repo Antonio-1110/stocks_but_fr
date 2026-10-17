@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -40,6 +41,19 @@ const checksTable = `CREATE TABLE IF NOT EXISTS tw_revenue_checks (
 	ticker     TEXT PRIMARY KEY,
 	checked_on TEXT NOT NULL,
 	rows       INTEGER NOT NULL
+)`
+
+// revisionsTable keeps every figure FinMind gives for a month that differs
+// from the one stored (issue #64). monthly_revenue keeps the figure as first
+// stored, so a backtest never uses a revision before it was published; this
+// table records when each revision was first seen.
+const revisionsTable = `CREATE TABLE IF NOT EXISTS tw_revenue_revisions (
+	ticker         TEXT NOT NULL,
+	month          TEXT NOT NULL,
+	stored_revenue REAL NOT NULL,
+	new_revenue    REAL NOT NULL,
+	seen_on        TEXT NOT NULL,
+	PRIMARY KEY (ticker, month, new_revenue)
 )`
 
 // A listed ticker FinMind returned no revenue for is asked again after this
@@ -71,8 +85,10 @@ type collector struct {
 }
 
 func (c *collector) run(ctx context.Context) error {
-	if _, err := c.st.DB.Exec(checksTable); err != nil {
-		return err
+	for _, q := range []string{checksTable, revisionsTable} {
+		if _, err := c.st.DB.Exec(q); err != nil {
+			return err
+		}
 	}
 	todo, err := c.todo()
 	if err != nil {
@@ -82,7 +98,7 @@ func (c *collector) run(ctx context.Context) error {
 		log.Printf("tw-revenue: nothing to fetch (empty universe or up to date)")
 		return nil
 	}
-	fetched, failed, stored := 0, 0, 0
+	fetched, failed, stored, revised := 0, 0, 0, 0
 	for i, t := range todo {
 		rows, hit, err := c.load(ctx, t)
 		if errors.Is(err, errQuota) {
@@ -100,18 +116,73 @@ func (c *collector) run(ctx context.Context) error {
 			failed++
 			continue
 		}
-		recs := toModel(rows, t.storeFrom)
-		if err := c.st.UpsertMonthlyRevenue(recs); err != nil {
+		// Every month in the response is checked for revisions; only months
+		// from storeFrom on are written, the year before is the YoY base.
+		recs := toModel(rows, c.start)
+		fresh, n, err := c.newMonths(t.ticker, recs)
+		if err != nil {
+			return err
+		}
+		fresh = slices.DeleteFunc(fresh, func(r model.MonthlyRevenue) bool { return r.Month.Before(t.storeFrom) })
+		if err := c.st.UpsertMonthlyRevenue(fresh); err != nil {
 			return err
 		}
 		if _, err := c.st.DB.Exec(`INSERT OR REPLACE INTO tw_revenue_checks (ticker, checked_on, rows) VALUES (?, ?, ?)`,
 			t.ticker, c.now.Format("2006-01-02"), len(recs)); err != nil {
 			return err
 		}
-		stored += len(recs)
+		stored += len(fresh)
+		revised += n
 	}
-	log.Printf("tw-revenue: %d requests, %d failed, %d rows stored", fetched, failed, stored)
+	log.Printf("tw-revenue: %d requests, %d failed, %d rows stored, %d revisions recorded", fetched, failed, stored, revised)
 	return nil
+}
+
+// newMonths returns the records for months not stored yet. A stored month is
+// never overwritten: when the fetched figure differs, it is recorded in
+// tw_revenue_revisions instead, once per distinct figure (n counts new ones).
+func (c *collector) newMonths(ticker string, recs []model.MonthlyRevenue) (fresh []model.MonthlyRevenue, n int, err error) {
+	rows, err := c.st.DB.Query(`SELECT month, revenue FROM monthly_revenue WHERE market = ? AND ticker = ?`,
+		model.MarketTW, ticker)
+	if err != nil {
+		return nil, 0, err
+	}
+	have := map[string]sql.NullFloat64{}
+	for rows.Next() {
+		var m string
+		var v sql.NullFloat64
+		if err := rows.Scan(&m, &v); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		have[m] = v
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	for _, r := range recs {
+		old, ok := have[r.Month.Format("2006-01-02")]
+		if !ok {
+			fresh = append(fresh, r)
+			continue
+		}
+		if !old.Valid || math.IsNaN(r.Revenue) || math.Abs(r.Revenue-old.Float64) < 0.5 {
+			continue
+		}
+		res, err := c.st.DB.Exec(`INSERT OR IGNORE INTO tw_revenue_revisions
+			(ticker, month, stored_revenue, new_revenue, seen_on) VALUES (?, ?, ?, ?, ?)`,
+			ticker, r.Month.Format("2006-01-02"), old.Float64, r.Revenue, c.now.Format("2006-01-02"))
+		if err != nil {
+			return nil, 0, err
+		}
+		if k, _ := res.RowsAffected(); k > 0 {
+			n++
+			log.Printf("tw-revenue: %s %s revised: %.0f stored, %.0f now (kept the stored figure)",
+				ticker, r.Month.Format("2006-01"), old.Float64, r.Revenue)
+		}
+	}
+	return fresh, n, nil
 }
 
 type target struct {
@@ -165,8 +236,8 @@ func (c *collector) todo() ([]target, error) {
 		case delisted, !have.Before(lastMonth):
 			continue
 		default:
-			// Rewrite from the newest stored month (it may have been revised)
-			// with the year before it fetched as the base for YoY and MoM.
+			// Fetch from the newest stored month (to see a revision of it,
+			// #64) with the year before it as the base for YoY and MoM.
 			stale = append(stale, target{co.Ticker, have.AddDate(0, -11, 0), have})
 		}
 	}

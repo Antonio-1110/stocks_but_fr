@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-15, at the end of Sprint 2. Earlier: 2026-10-13, end of Sprint 1; 2026-10-11, after the repository audit
+Updated 2026-10-17, at the end of Sprint 3. Earlier: 2026-10-15, end of Sprint 2; 2026-10-13, end of Sprint 1; 2026-10-11, after the repository audit
 (`/mnt/project-files/audit/repo-audit-2026-10.md` in the project). Update this
 file at the end of every sprint. The owner's full handoff is not in the repo;
 the section numbers below refer to it.
@@ -10,10 +10,10 @@ Status words: **done**, **planned** (with the release it belongs to),
 
 ## Now
 
-Release 1 (trustworthy foundation) is nearly done. The data is complete, versioned
-and point-in-time for listings, and both strategies have pinned baselines
+Release 1 (trustworthy foundation) is done. The data is complete, versioned,
+private and point-in-time for listings and revenue, and both strategies have pinned baselines
 ([revenue momentum](backtest/baselines/revenue_momentum.md),
-[cycle bottom](backtest/baselines/cycle_bottom.md)). Sprint 3 is proposed below.
+[cycle bottom](backtest/baselines/cycle_bottom.md)). Sprint 4 is proposed below.
 
 **Sprint 0 (done 2026-10-11): fix what was broken or could lose data**
 
@@ -68,13 +68,23 @@ and point-in-time for listings, and both strategies have pinned baselines
   the buys it blocks are post-revenue limit-up gaps, among its biggest winners.
   Cycle bottom trails 0050 since 2020 with a deeper drop.
 
-**Sprint 3 (proposed): close Release 1**
+**Sprint 3 (done 2026-10-17): close Release 1**
 
 1. Private database: **done 2026-10-17** (#62, #63). The `data` release lives on
    the private `stocks_but_fr-data` repo; the public release is deleted.
 2. Stuck sells: **done 2026-10-17** (#58). A sell on a day the stock doesn't
    trade waits for its next open, in paper and in the backtester.
-3. Keep revenue revisions instead of overwriting them (§8.3).
+3. Revenue revisions: **done 2026-10-17** (#64). A stored month keeps its first
+   figure; a different later figure goes to `tw_revenue_revisions` with the date
+   it was first seen.
+
+**Sprint 4 (proposed): current data on time, then the DCA test**
+
+1. #24: the day's prices from TWSE and TPEx in one request each, with FinMind
+   kept for backfill. Today TWSE prices arrive over several hourly runs, so the
+   newest day is often half collected and paper waits for it.
+2. #20: apply the limit and halt rules to the averaging-down strategy, then run
+   its real-data report (variants as described and capped).
 
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names
@@ -100,7 +110,7 @@ have no official listing date.
 | 7.4 | Storage benchmark | done in the audit |
 | 8.1 | Staged publication | **trimmed**, done: snapshots + manifest + validation before publish (#38, #44). A separate candidate store and atomic manifest switching are **cut**: one writer, a daily cadence and kept snapshots cover the same risk |
 | 8.2 | Validation checks | done (`radar validate`, #44, #59, #60) |
-| 8.3 | Point-in-time | done for revenue (deadline rule), prices, flows. **Planned R1:** keep revenue revisions; real filing dates **deferred** until the deadline rule is shown to cost return |
+| 8.3 | Point-in-time | done for revenue (deadline rule), prices, flows. Revenue revisions kept (#64); real filing dates **deferred** until the deadline rule is shown to cost return |
 | 8.4 | Reproducibility | done: snapshot id and code version on every backtest run, pinned baselines kept on the release (#44, #50, #52, #61) |
 | 8.5 | Data-health dashboard | done: one static page (#45) |
 | 9 | Security master | done for Taiwan: listing dates and industry changes (#56). Internal ids, multi-currency, settlement and short rules **deferred** to a second market |
@@ -125,8 +135,8 @@ have no official listing date.
 | 17.1 | Keep Actions and Pages | done |
 | 17.2 | Agent workflow (branches, PRs) | decided 2026-10-15: main-only, per AGENTS.md |
 | 17.3 | CI/CD checks | done: tests before every publish and collect (#43) |
-| 17.4 | Cost management | done as a rule (PRODUCT.md non-goals). Data release: decided 2026-10-15 to make it private (**planned**, Sprint 3) |
-| 18 R1 | Trustworthy foundation | in progress: Sprints 0–2 done, Sprint 3 proposed to close it |
+| 17.4 | Cost management | done as a rule (PRODUCT.md non-goals). Data release: private since 2026-10-17 (#62, #63) |
+| 18 R1 | Trustworthy foundation | done 2026-10-17 (Sprints 0–3) |
 | 18 R2 | Market and company intelligence | **planned**, trimmed as above (§10–12) |
 | 18 R3 | Research laboratory | **planned**, light (§13) |
 | 18 R4 | Multi-market | **deferred**: start a US prices-only universe (≤ 500 names) once R1–R3 work for Taiwan and you want a US sleeve. Singapore cut |
