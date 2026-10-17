@@ -13,7 +13,7 @@ Status words: **done**, **planned** (with the release it belongs to),
 Release 1 (trustworthy foundation) is done. The data is complete, versioned,
 private and point-in-time for listings and revenue, and both strategies have pinned baselines
 ([revenue momentum](backtest/baselines/revenue_momentum.md),
-[cycle bottom](backtest/baselines/cycle_bottom.md)). Sprint 4 is proposed below.
+[cycle bottom](backtest/baselines/cycle_bottom.md)). Sprint 4 is done; the next sprint is not chosen yet.
 
 **Sprint 0 (done 2026-10-11): fix what was broken or could lose data**
 
@@ -78,13 +78,16 @@ private and point-in-time for listings and revenue, and both strategies have pin
    figure; a different later figure goes to `tw_revenue_revisions` with the date
    it was first seen.
 
-**Sprint 4 (in progress): current data on time, then the DCA test**
+**Sprint 4 (done 2026-10-17): current data on time, then the DCA test**
 
 1. #24: **done 2026-10-17**. TWSE's latest day comes from its open data file
    (one request, about 1,300 stocks); TPEx already came from its daily files.
    FinMind backfills and covers stocks the file can't extend cleanly.
-2. #20: apply the limit and halt rules to the averaging-down strategy, then run
-   its real-data report (variants as described and capped).
+2. #20: **done 2026-10-17**. The averaging-down strategy follows the limit and
+   halt rules. On real data neither version beats 0050: the martingale made 13.6%
+   a year from 2020 (0050 29.0%) but ran out of cash on a quarter of days in
+   2012–2019 and lost 58% in 2015; the capped version made 4.4%. Details in
+   [docs/dca-results.md](docs/dca-results.md).
 
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names

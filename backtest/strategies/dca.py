@@ -135,8 +135,10 @@ class OrderEngine(Engine):
     Each day, after the close is marked, `strategy.orders(view, book)` returns
     orders to fill at the next open. Sells go first, then buys in the order
     given. A buy is cut to what the cash pays for (counted in stats.short) and
-    to the engine's liquidity cap (stats.adv_capped). Weight-based strategies,
-    like the benchmark, run exactly as in Engine.
+    to the engine's liquidity cap (stats.adv_capped). Fills follow Engine's
+    rules: no buy at a limit-up open (#53); a sell at a limit-down open, or on
+    a day the stock doesn't trade (#58), waits for the next open it can fill
+    at. Weight-based strategies, like the benchmark, run exactly as in Engine.
     """
 
     def run(self, strategy, start, end=None) -> RunResult:
@@ -156,15 +158,19 @@ class OrderEngine(Engine):
         self.stats = Stats()
         self._cycles: dict[str, Cycle] = {}
         self._reason = "delisted"
+        self._waiting: dict[str, Order] = {}  # sells waiting for an open they can fill at
         pending = None
         equity, invested = [], []
 
         for day in days:
             self._reason = "delisted"
             self._delist(day)
+            self._waiting = {t: o for t, o in self._waiting.items() if t in self._pos}
             if pending is not None:
                 self._execute(day, *pending)
                 pending = None
+            elif self._waiting:
+                self._execute(day, day, [])
             value = self._mark(day)
             for c in self._cycles.values():
                 c.days += 1
@@ -197,19 +203,33 @@ class OrderEngine(Engine):
 
     def _execute(self, day, signal_day, orders: list[Order]) -> None:
         opens = self.data.adj_open.loc[day]
-        for o in [o for o in orders if o.side == "sell"]:
+        sells = dict(self._waiting)
+        sells.update({o.ticker: o for o in orders if o.side == "sell"})
+        self._waiting = {}
+        for o in sells.values():
             px = opens.get(o.ticker)
             if o.ticker not in self._pos:
                 continue
-            if px is None or pd.isna(px):
-                self._res.skipped_orders += 1
+            if px is None or pd.isna(px):          # not trading today: wait
+                self._waiting[o.ticker] = o
+                continue
+            if self._locked(day, o.ticker) < 0:    # locked limit-down: wait
+                self._waiting[o.ticker] = o
+                self._res.limit_deferred_sells += 1
+                self._res.limit_blocked += 1
                 continue
             self._reason = o.reason
             self._sell(day, o.ticker, self._pos[o.ticker].units * px, px, everything=True)
         for o in [o for o in orders if o.side == "buy"]:
             px = opens.get(o.ticker)
+            if o.ticker in sells:                  # sold today, or the sell still waits
+                continue
             if px is None or pd.isna(px):
                 self._res.skipped_orders += 1
+                continue
+            if self._locked(day, o.ticker) > 0:
+                self._res.limit_blocked_buys += 1
+                self._res.limit_blocked += 1
                 continue
             held = self._pos[o.ticker].units * px if o.ticker in self._pos else 0.0
             adv = self.adv.at[signal_day, o.ticker] if o.ticker in self.adv else float("nan")

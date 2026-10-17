@@ -138,3 +138,35 @@ def test_report_has_dca_section_and_partial_data_warning(tmp_path):
     assert "DCA details" in page and page.rstrip().endswith("</html>")
     design = out["periods"][0]
     assert design["dca"]["stopped"] == 1 and design["coverage"]["share"] == pytest.approx(0.5)
+
+
+def test_no_entry_at_a_limit_up_open(tmp_path):
+    # The 89 close signals an entry; the next day opens 10% up, locked.
+    db = build(tmp_path / "radar.db", {"2001": FLAT + [89, 98]})
+    s, strat, res = run(db)
+    assert res.fills == [] and res.limit_blocked_buys == 1
+
+
+def test_take_profit_waits_out_a_halt(tmp_path):
+    db = build(tmp_path / "radar.db", {"2001": FLAT + [89, 89, 90]})
+    con = sqlite3.connect(db)
+    con.executemany("DELETE FROM prices WHERE ticker = '2001' AND date = ?",
+                    [(DAYS[i].strftime("%Y-%m-%d"),) for i in (13, 14, 15)])
+    con.commit()
+    con.close()
+    s, strat, res = run(db)
+    sell = [f for f in res.fills if f.side == "sell"]
+    assert [(f.day, f.price) for f in sell] == [(DAYS[16], 90)]
+    assert strat.stats.cycles[0].reason == "take_profit"
+
+
+def test_take_profit_waits_out_a_limit_down_open_and_no_add_meanwhile(tmp_path):
+    # Take profit signalled at the 90 close; the next open is 11% down,
+    # locked, so the sell waits a day. The add the 80 close signals is
+    # dropped; after the sell, 80 is still a dip, so a new cycle starts.
+    db = build(tmp_path / "radar.db", {"2001": FLAT + [89, 89, 90, 80, 80]})
+    s, strat, res = run(db)
+    assert [(f.side, f.day, f.price) for f in res.fills[:3]] == [
+        ("buy", DAYS[11], 89), ("sell", DAYS[14], 80), ("buy", DAYS[15], 80)]
+    assert res.limit_deferred_sells == 1
+    assert strat.stats.cycles[0].trade.pnl < 0
