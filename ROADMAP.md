@@ -70,8 +70,8 @@ and point-in-time for listings, and both strategies have pinned baselines
 
 **Sprint 3 (proposed): close Release 1**
 
-1. Private database: move the `data` release to a private repo (waits on the
-   owner's one-time setup: the repo and a `DATA_TOKEN` secret).
+1. Private database: **done 2026-10-17** (#62, #63). The `data` release lives on
+   the private `stocks_but_fr-data` repo; the public release is deleted.
 2. Stuck sells (#58): a paper sell stays pending for good if the stock is
    suspended the day after the signal; the backtester drops a sell on a day with
    no price.
