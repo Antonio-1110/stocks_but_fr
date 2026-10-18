@@ -200,10 +200,21 @@ func strategyFor(name string, cfg config.Config, db *sql.DB) (strategy, error) {
 	switch name {
 	case "revenue_momentum":
 		return momentum{cfg.Strategy.RevenueMomentum, db, cfg.Revenue.MinCoverage}, nil
+	case "revenue_momentum_foreign":
+		// The rm_score variant of backtest/strategies/foreign_flow.py (issue #67).
+		p, f := cfg.Strategy.RevenueMomentum, cfg.Strategy.ForeignFlow
+		p.ForeignWeight, p.ForeignDays = f.RMScore.ForeignWeight, f.RMScore.FlowDays
+		if p.ForeignDays == 0 {
+			p.ForeignDays = f.FlowDays
+		}
+		if p.ForeignWeight <= 0 || p.ForeignWeight > 1 || p.ForeignDays <= 0 {
+			return nil, fmt.Errorf("[strategy.foreign_flow.rm_score] needs foreign_weight in (0, 1] and flow_days > 0")
+		}
+		return momentum{p, db, cfg.Revenue.MinCoverage}, nil
 	case "cycle_bottom":
 		return cycle{cfg.Strategy.CycleBottom, db, cfg.Revenue.MinCoverage}, nil
 	}
-	return nil, fmt.Errorf("unknown strategy %q (want revenue_momentum or cycle_bottom)", name)
+	return nil, fmt.Errorf("unknown strategy %q (want revenue_momentum, revenue_momentum_foreign or cycle_bottom)", name)
 }
 
 func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now time.Time) error {

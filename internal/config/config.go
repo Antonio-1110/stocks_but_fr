@@ -122,6 +122,7 @@ type Unpriced struct {
 type Strategy struct {
 	RevenueMomentum RevenueMomentum `toml:"revenue_momentum"`
 	CycleBottom     CycleBottom     `toml:"cycle_bottom"`
+	ForeignFlow     ForeignFlow     `toml:"foreign_flow"`
 }
 
 // RevenueMomentum is [strategy.revenue_momentum]; see backtest/strategies/revenue_momentum.py.
@@ -140,6 +141,24 @@ type RevenueMomentum struct {
 	TrustDays          int     `toml:"trust_days"`
 	StopLoss           float64 `toml:"stop_loss"`
 	StopMADays         int     `toml:"stop_ma_days"`
+	// Set in code, not read from this section (the backtester rejects unknown
+	// keys there): the paper portfolio revenue_momentum_foreign copies them
+	// from [strategy.foreign_flow.rm_score] (issue #67).
+	ForeignWeight float64 `toml:"-"` // weight of the foreign rank in the score; 0 = off
+	ForeignDays   int     `toml:"-"` // flow dates in the foreign intensity window
+}
+
+// ForeignFlow is the part of [strategy.foreign_flow] the Go side reads; see
+// backtest/strategies/foreign_flow.py. Only the rm_score variant runs live.
+type ForeignFlow struct {
+	FlowDays int           `toml:"flow_days"`
+	RMScore  ForeignScored `toml:"rm_score"`
+}
+
+// ForeignScored is one revenue-variant table under [strategy.foreign_flow].
+type ForeignScored struct {
+	FlowDays      int     `toml:"flow_days"` // 0 = the section's flow_days
+	ForeignWeight float64 `toml:"foreign_weight"`
 }
 
 // CycleBottom is [strategy.cycle_bottom]; see backtest/strategies/cycle_bottom.py.
@@ -246,10 +265,11 @@ func Default() Config {
 				MinAvgTurnover:    20_000_000,
 				TurnoverDays:      20,
 			},
+			ForeignFlow: ForeignFlow{FlowDays: 60, RMScore: ForeignScored{ForeignWeight: 0.33}},
 		},
 		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
 		Paper: Paper{
-			Strategies:     []string{"revenue_momentum", "cycle_bottom"},
+			Strategies:     []string{"revenue_momentum", "cycle_bottom", "revenue_momentum_foreign"},
 			InitialCapital: 5_000_000,
 			Benchmark:      "0050",
 			MinCoverage:    0.9,

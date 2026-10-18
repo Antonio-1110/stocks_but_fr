@@ -157,6 +157,29 @@ func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit
 	for _, t := range pass {
 		score[t] = (1-p.HighWeight)*yoyRank[t] + p.HighWeight*nearRank[t]
 	}
+	var foreign map[string]float64
+	if p.ForeignWeight > 0 && len(pass) > 0 {
+		// RevenueMomentumForeign in backtest/strategies/foreign_flow.py (issue #67):
+		// blend the rank of that score with the rank of foreign intensity.
+		if foreign, err = foreignIntensity(db, p.ForeignDays); err != nil {
+			return nil, "", err
+		}
+		var known []string
+		for _, t := range pass {
+			if _, ok := foreign[t]; ok {
+				known = append(known, t)
+			}
+		}
+		base := pctRank(pass, func(t string) float64 { return score[t] })
+		fRank := pctRank(known, func(t string) float64 { return foreign[t] })
+		for _, t := range pass {
+			f, ok := fRank[t]
+			if !ok {
+				f = 0.5 // no flow rows: middle of the pack, as in the backtest
+			}
+			score[t] = (1-p.ForeignWeight)*base[t] + p.ForeignWeight*f
+		}
+	}
 	sort.Slice(pass, func(i, j int) bool {
 		if score[pass[i]] != score[pass[j]] {
 			return score[pass[i]] > score[pass[j]]
@@ -167,9 +190,12 @@ func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit
 	hits := make([]Hit, len(pass))
 	for i, t := range pass {
 		s := stocks[t]
-		hits[i] = Hit{Ticker: t, Name: s.name, Industry: s.industry,
-			Detail: fmt.Sprintf("revenue YoY at least %+.0f%% each of the last %d months · %.1f%% below 52-week high",
-				s.minYoY, p.YoYMonths, (1-s.near)*100)}
+		detail := fmt.Sprintf("revenue YoY at least %+.0f%% each of the last %d months · %.1f%% below 52-week high",
+			s.minYoY, p.YoYMonths, (1-s.near)*100)
+		if f, ok := foreign[t]; ok {
+			detail += fmt.Sprintf(" · foreign net %+.1f%% of %d-day volume", f*100, p.ForeignDays)
+		}
+		hits[i] = Hit{Ticker: t, Name: s.name, Industry: s.industry, Detail: detail}
 	}
 	return hits, asOf, nil
 }
@@ -212,6 +238,37 @@ func trustNet(db *sql.DB, days int) (map[string]int64, error) {
 			return nil, err
 		}
 		out[t] = n.Int64
+	}
+	return out, q.Err()
+}
+
+// foreignIntensity is foreign net NTD bought over the last days flow dates
+// divided by NTD traded on those dates, for stocks with flow rows there
+// (intensity() in backtest/strategies/foreign_flow.py). A day's NTD is its
+// net shares times that day's close.
+func foreignIntensity(db *sql.DB, days int) (map[string]float64, error) {
+	dates, err := tradingDays(db, `institutional_flows`, days)
+	if err != nil || len(dates) == 0 {
+		return map[string]float64{}, err
+	}
+	q, err := db.Query(`SELECT f.ticker, SUM(f.foreign_net * p.close),
+		(SELECT SUM(turnover) FROM prices p2 WHERE p2.market = 'TW' AND p2.ticker = f.ticker AND p2.date >= ?)
+		FROM institutional_flows f JOIN prices p ON p.market = f.market AND p.ticker = f.ticker AND p.date = f.date
+		WHERE f.market = 'TW' AND f.date >= ? GROUP BY f.ticker`, dates[len(dates)-1], dates[len(dates)-1])
+	if err != nil {
+		return nil, err
+	}
+	defer q.Close()
+	out := map[string]float64{}
+	for q.Next() {
+		var t string
+		var net, traded sql.NullFloat64
+		if err := q.Scan(&t, &net, &traded); err != nil {
+			return nil, err
+		}
+		if traded.Float64 > 0 {
+			out[t] = net.Float64 / traded.Float64
+		}
 	}
 	return out, q.Err()
 }

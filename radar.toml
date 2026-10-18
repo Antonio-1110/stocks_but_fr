@@ -67,7 +67,7 @@ unpriced_exit = 25             # ...and again only after it has fallen below thi
 # in cash, trades on the close of the latest fully collected trading day, fills at
 # the next trading day's open with [costs.tw] fees and tax, and is compared with
 # the same money put into the benchmark on its first fill day.
-strategies = ["revenue_momentum", "cycle_bottom"]
+strategies = ["revenue_momentum", "cycle_bottom", "revenue_momentum_foreign"]  # the last: issue #67
 initial_capital = 5_000_000    # NTD, each portfolio
 benchmark = "0050"
 min_coverage = 0.9             # a day's prices count as collected once it has this share of the previous day's stocks

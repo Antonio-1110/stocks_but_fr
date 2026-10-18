@@ -90,6 +90,8 @@ type Tick struct {
 var titles = map[string]struct{ title, rules string }{
 	"revenue_momentum": {"Revenue momentum",
 		"Monthly, the day after revenue is due: hold the top names with strong revenue YoY 3 months running and a price near its 52-week high. Stop loss between rebalances."},
+	"revenue_momentum_foreign": {"Revenue momentum + 外資",
+		"Revenue momentum, with foreign investors' net buying over the last 60 trading days (as a share of traded value) as a third of the ranking score."},
 	"cycle_bottom": {"Cycle bottom",
 		"Daily: buy cyclicals (semis, panels, shipping, steel, plastics) when revenue YoY turns up after a long negative stretch; sell when it rolls over or on the stop loss."},
 }
