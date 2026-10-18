@@ -137,3 +137,51 @@ stop_loss = 0.20
 
 [strategy.dca.martingale_trend] # the martingale, but no new stock and no add while 0050 is below its 200-day average
 regime_days = 200
+
+[strategy.foreign_flow]        # issue #66: follow 外資, acting at the next open after flows are published
+# Shared keys; each sub-table below is one variant. Revenue momentum keys (top_n, exit_rank,
+# stop_loss, min_adv_ntd, ...) default to revenue_momentum.py's DEFAULTS and can be set here.
+flow_days = 60                 # window: foreign net NTD bought / NTD traded over these trading days
+min_buy_share = 0.0            # share of window days foreigners were net buyers
+foreign_weight = 0.0           # revenue variant: weight of the foreign rank in the score
+ma_days = 0                    # flow variant: close must be above this moving average (0 = off)
+# min_intensity = 0.0          # foreign intensity must be above this (unset = no gate)
+
+[strategy.foreign_flow.flow20] # top 12 by 20-day foreign buying, liquid stocks
+variant = "flow"
+flow_days = 20
+min_adv_ntd = 50_000_000
+
+[strategy.foreign_flow.flow60] # same over 60 days
+variant = "flow"
+min_adv_ntd = 50_000_000
+
+[strategy.foreign_flow.flow60_steady] # ...and net buying on at least 60% of those days
+variant = "flow"
+min_adv_ntd = 50_000_000
+min_buy_share = 0.6
+
+[strategy.foreign_flow.flow60_trend] # ...and above the 60-day average
+variant = "flow"
+min_adv_ntd = 50_000_000
+ma_days = 60
+
+[strategy.foreign_flow.rm_gate20] # revenue momentum, only names foreigners net bought over 20 days
+variant = "revenue"
+flow_days = 20
+min_intensity = 0.0
+
+[strategy.foreign_flow.rm_gate60] # same over 60 days
+variant = "revenue"
+min_intensity = 0.0
+
+[strategy.foreign_flow.rm_no_dump] # revenue momentum, skipping names foreigners sold hard (>5% of volume) over 60 days
+variant = "revenue"
+min_intensity = -0.05
+
+[strategy.foreign_flow.rm_score] # revenue momentum with the 60-day foreign rank as a third of the score
+variant = "revenue"
+foreign_weight = 0.33
+
+[strategy.foreign_flow.rm_plain] # no foreign rule: must match revenue_momentum (sanity check)
+variant = "revenue"
