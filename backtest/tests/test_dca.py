@@ -112,7 +112,7 @@ def test_delisted_stock_ends_the_cycle_at_its_last_close(tmp_path):
 def test_make_rejects_unknown_keys_and_reads_radar_toml(tmp_path):
     s = fixture.settings(tmp_path / "radar.db")
     p = s.strategies["dca"]
-    assert dca.variants(p) == ["martingale", "capped"]
+    assert dca.variants(p) == ["martingale", "capped", "martingale_trend"]
     assert dca.make(p, s).p["max_adds"] == 0
     assert dca.make(p, s, "capped").p["max_adds"] == 3
     with pytest.raises(ValueError):
@@ -170,3 +170,18 @@ def test_take_profit_waits_out_a_limit_down_open_and_no_add_meanwhile(tmp_path):
         ("buy", DAYS[11], 89), ("sell", DAYS[14], 80), ("buy", DAYS[15], 80)]
     assert res.limit_deferred_sells == 1
     assert strat.stats.cycles[0].trade.pnl < 0
+
+
+def test_trend_filter_blocks_entries_and_adds_while_the_market_is_down(tmp_path):
+    # 0050 falls from day 12 to day 40, then goes flat: the entry signalled at
+    # day 10 fills, the adds the 84 and later closes signal wait until 0050
+    # is back at its 5-day average. With 0050 falling from the start, no
+    # cycle starts at all.
+    later = [50.0] * 12 + [50 - i for i in range(1, 30)]
+    db = build(tmp_path / "radar.db", {"2001": FALL, "0050": later})
+    s, strat, res = run(db, regime_days=5)
+    assert [(f.side, f.day) for f in res.fills if f.day <= DAYS[44]] == [("buy", DAYS[11])]
+    assert res.fills[1].side == "buy" and res.fills[1].day > DAYS[44]
+    db = build(tmp_path / "early.db", {"2001": FALL, "0050": [50 - i * 0.5 for i in range(40)]})
+    s, strat, res = run(db, regime_days=5)
+    assert res.fills == []

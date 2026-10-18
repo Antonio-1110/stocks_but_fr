@@ -16,9 +16,14 @@ The owner's idea, tested as described and in a capped form:
 - `max_adds` = 0 means no limit: adds continue until cash runs out. A
   `stop_loss` above 0 sells everything when the close is that far below the
   average cost.
+- `regime_days` above 0 adds a market trend filter (issue #65): while
+  `regime_ticker` closes below its average close over that many trading days,
+  no cycle starts and no add is bought. Held stocks still sell at the take
+  profit or the stop.
 
 Variants are tables under [strategy.dca] in radar.toml that override these
-keys: `martingale` (as described: no cap, no stop) and `capped`.
+keys: `martingale` (as described: no cap, no stop), `capped`, and
+`martingale_trend` (the martingale with the trend filter).
 
 Every signal is taken at a close and filled at the next open, like the shared
 engine. The shared engine takes target weights, which can't say "buy 200,000
@@ -62,6 +67,8 @@ DEFAULTS = {
     "take_profit": 0.01,
     "max_adds": 0,
     "stop_loss": 0.0,
+    "regime_ticker": "0050",
+    "regime_days": 0,
 }
 OTHER_KEYS = {"variant", "stress_windows"}
 
@@ -279,6 +286,7 @@ class DCA:
         p = self.p
         px = view.adj_close
         today = px.iloc[-1]
+        down = self._downtrend(px)
         out: list[Order] = []
         for t, h in book.items():
             price = today.get(t)
@@ -288,15 +296,26 @@ class DCA:
                 out.append(Order(t, "sell", 0.0, "take_profit"))
             elif p["stop_loss"] > 0 and price <= h.avg_cost * (1 - p["stop_loss"]):
                 out.append(Order(t, "sell", 0.0, "stop"))
-            elif ((p["max_adds"] <= 0 or h.adds < p["max_adds"])
+            elif (not down and (p["max_adds"] <= 0 or h.adds < p["max_adds"])
                   and price <= h.last_buy * (1 - p["add_step"])):
                 out.append(Order(t, "buy", p["base_order"] * p["multiplier"] ** (h.adds + 1), "add"))
 
         free = int(p["max_cycles"]) - len(book)
-        if free > 0:
+        if free > 0 and not down:
             for t in self._dips(view, px, today, set(book))[:free]:
                 out.append(Order(t, "buy", float(p["base_order"]), "entry"))
         return out
+
+    def _downtrend(self, px) -> bool:
+        """True while the regime ticker closes below its regime_days average.
+        Off (False) when the filter is off or the history is too short."""
+        n, t = int(self.p["regime_days"]), self.p["regime_ticker"]
+        if n <= 0 or t not in px.columns:
+            return False
+        s = px[t].iloc[-n:]
+        if s.count() < n or pd.isna(s.iloc[-1]):
+            return False
+        return bool(s.iloc[-1] < s.mean())
 
     def _dips(self, view, px, today, held: set[str]) -> list[str]:
         p = self.p

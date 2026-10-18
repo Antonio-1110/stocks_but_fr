@@ -37,3 +37,28 @@ What this says:
 - The cap and stop keep it solvent, but the stops (about 20 per period, each 20% or more
   under average cost, up to 33%) eat nearly all the +1% wins. After costs, a 1% bounce keeps under
   60% of its gain.
+
+## With a market trend filter (#65)
+
+Same martingale, but while 0050 closes below its 200-day average no new stock
+is started and no add is bought (`[strategy.dca.martingale_trend]`). Stocks
+already held still sell at +1%.
+
+| | Trend design | Trend test | Martingale design | Martingale test |
+|---|---|---|---|---|
+| CAGR | 7.9% | 11.1% | 8.4% | 13.6% |
+| Worst drop | −59.7% | −6.2% | −59.7% | −23.7% |
+| Cycles (win rate) | 765 (95.1%) | 891 (92.9%) | 817 (94.6%) | 1,048 (92.8%) |
+| Most capital in one stock | 6.7M (2498, 2015) | 4.8M (2376, 2023) | 6.8M | 7.9M |
+| Trading days short of cash | 6.1% | 0.4% | 25.6% | 4.8% |
+| Crash return (2015 design; 2020, 2022 test) | −57.7% | −3.0%, +1.1% | −57.6% | −14.3%, −4.4% |
+
+What this says:
+
+- From 2020 the filter cuts the worst drop from −24% to −6%, and the account
+  almost never runs short of cash, for about 2.5 points a year less return.
+  It still trails 0050 (29.0%) by a wide margin.
+- It doesn't help in 2015. That loss was one stock, HTC (2498), falling on its
+  own while the market was still above its average: the martingale put 6.7M
+  NTD into it. A market signal can't see a single-stock collapse; a cap on the
+  money in one stock (or the capped version's stop) is what limits that.
