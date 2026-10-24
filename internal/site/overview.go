@@ -57,6 +57,10 @@ var paperTitles = map[string]string{
 	"revenue_momentum":         "Revenue momentum",
 	"revenue_momentum_foreign": "Revenue momentum + 外資",
 	"cycle_bottom":             "Cycle bottom",
+	"record_revenue":           "Record revenue",
+	"breakout":                 "Breakout swing",
+	"window_dressing":          "投信 window dressing",
+	"pullback":                 "Pullback buys",
 }
 
 func paperTitle(name string) string {

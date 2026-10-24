@@ -123,6 +123,10 @@ type Strategy struct {
 	RevenueMomentum RevenueMomentum `toml:"revenue_momentum"`
 	CycleBottom     CycleBottom     `toml:"cycle_bottom"`
 	ForeignFlow     ForeignFlow     `toml:"foreign_flow"`
+	RecordRevenue   RecordRevenue   `toml:"record_revenue"`
+	Breakout        Breakout        `toml:"breakout"`
+	WindowDressing  WindowDressing  `toml:"window_dressing"`
+	Pullback        Pullback        `toml:"pullback"`
 }
 
 // RevenueMomentum is [strategy.revenue_momentum]; see backtest/strategies/revenue_momentum.py.
@@ -176,6 +180,61 @@ type CycleBottom struct {
 	MaxPositions      int      `toml:"max_positions"`
 	MinAvgTurnover    float64  `toml:"min_avg_turnover"`
 	TurnoverDays      int      `toml:"turnover_days"`
+}
+
+// RecordRevenue is [strategy.record_revenue]; see backtest/strategies/record_revenue.py (issue #70).
+type RecordRevenue struct {
+	MaxPositions       int     `toml:"max_positions"`
+	RecordMonths       int     `toml:"record_months"`
+	MinYoYPct          float64 `toml:"min_yoy_pct"`
+	MinBaseNTD         float64 `toml:"min_base_ntd"`
+	MinADVNTD          float64 `toml:"min_adv_ntd"`
+	ADVDays            int     `toml:"adv_days"`
+	HoldDays           int     `toml:"hold_days"`
+	TrailStop          float64 `toml:"trail_stop"`
+	RevenueDeadlineDay int     `toml:"revenue_deadline_day"`
+}
+
+// Breakout is [strategy.breakout]; see backtest/strategies/breakout.py (issue #71).
+type Breakout struct {
+	MaxPositions int     `toml:"max_positions"`
+	BreakoutDays int     `toml:"breakout_days"`
+	VolumeDays   int     `toml:"volume_days"`
+	VolumeMult   float64 `toml:"volume_mult"`
+	MinADVNTD    float64 `toml:"min_adv_ntd"`
+	ADVDays      int     `toml:"adv_days"`
+	RegimeTicker string  `toml:"regime_ticker"`
+	RegimeDays   int     `toml:"regime_days"`
+	ATRDays      int     `toml:"atr_days"`
+	ATRMult      float64 `toml:"atr_mult"`
+}
+
+// WindowDressing is [strategy.window_dressing]; see backtest/strategies/window_dressing.py (issue #72).
+type WindowDressing struct {
+	Quarters     []int   `toml:"quarters"`
+	EntryDays    int     `toml:"entry_days"`
+	ExitDays     int     `toml:"exit_days"`
+	FlowDays     int     `toml:"flow_days"`
+	MaxPositions int     `toml:"max_positions"`
+	MinADVNTD    float64 `toml:"min_adv_ntd"`
+	ADVDays      int     `toml:"adv_days"`
+	SkipLargest  int     `toml:"skip_largest"`
+	StopLoss     float64 `toml:"stop_loss"`
+}
+
+// Pullback is [strategy.pullback]; see backtest/strategies/pullback.py (issue #73).
+type Pullback struct {
+	MaxPositions int     `toml:"max_positions"`
+	MinADVNTD    float64 `toml:"min_adv_ntd"`
+	ADVDays      int     `toml:"adv_days"`
+	TrendDays    int     `toml:"trend_days"`
+	StrengthDays int     `toml:"strength_days"`
+	StrengthPct  float64 `toml:"strength_pct"`
+	RSIDays      int     `toml:"rsi_days"`
+	EntryRSI     float64 `toml:"entry_rsi"`
+	ExitMADays   int     `toml:"exit_ma_days"`
+	MaxHoldDays  int     `toml:"max_hold_days"`
+	StopLoss     float64 `toml:"stop_loss"`
 }
 
 // Paper is [paper]: portfolios that follow a strategy forward on live data (issue #35).
@@ -266,10 +325,19 @@ func Default() Config {
 				TurnoverDays:      20,
 			},
 			ForeignFlow: ForeignFlow{FlowDays: 60, RMScore: ForeignScored{ForeignWeight: 0.33}},
+			RecordRevenue: RecordRevenue{MaxPositions: 8, RecordMonths: 36, MinYoYPct: 20, MinBaseNTD: 10_000_000,
+				MinADVNTD: 20_000_000, ADVDays: 20, HoldDays: 20, TrailStop: 0.10, RevenueDeadlineDay: 10},
+			Breakout: Breakout{MaxPositions: 8, BreakoutDays: 55, VolumeDays: 50, VolumeMult: 2, MinADVNTD: 30_000_000,
+				ADVDays: 20, RegimeTicker: "0050", RegimeDays: 200, ATRDays: 20, ATRMult: 3},
+			WindowDressing: WindowDressing{Quarters: []int{3, 6, 9, 12}, EntryDays: 28, ExitDays: 3, FlowDays: 20,
+				MaxPositions: 10, MinADVNTD: 20_000_000, ADVDays: 20, SkipLargest: 100, StopLoss: 0.10},
+			Pullback: Pullback{MaxPositions: 10, MinADVNTD: 30_000_000, ADVDays: 20, TrendDays: 200, StrengthDays: 120,
+				StrengthPct: 0.2, RSIDays: 2, EntryRSI: 10, ExitMADays: 5, MaxHoldDays: 10, StopLoss: 0.10},
 		},
 		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
 		Paper: Paper{
-			Strategies:     []string{"revenue_momentum", "cycle_bottom", "revenue_momentum_foreign"},
+			Strategies: []string{"revenue_momentum", "cycle_bottom", "revenue_momentum_foreign",
+				"record_revenue", "breakout", "window_dressing", "pullback"},
 			InitialCapital: 5_000_000,
 			Benchmark:      "0050",
 			MinCoverage:    0.9,

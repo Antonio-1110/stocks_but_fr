@@ -94,6 +94,14 @@ var titles = map[string]struct{ title, rules string }{
 		"Revenue momentum, with foreign investors' net buying over the last 60 trading days (as a share of traded value) as a third of the ranking score."},
 	"cycle_bottom": {"Cycle bottom",
 		"Daily: buy cyclicals (semis, panels, shipping, steel, plastics) when revenue YoY turns up after a long negative stretch; sell when it rolls over or on the stop loss."},
+	"record_revenue": {"Record revenue trades",
+		"Monthly, the day after revenue is due: buy up to 8 stocks whose revenue just hit a 3-year high with YoY of 20% or more. Sell after 20 trading days unless they post another record, or 10% below their high since bought."},
+	"breakout": {"Breakout swing",
+		"Daily, while 0050 is above its 200-day average: buy up to 8 stocks closing at a new 55-day high on at least twice their usual traded value. Sell on a trailing stop 3 average daily moves below the high since bought."},
+	"window_dressing": {"投信 window dressing",
+		"Four weeks before each quarter end: buy the 10 small and mid caps 投信 bought hardest over 20 days (as a share of traded value). Sell everything 3 days before the quarter ends, or on a 10% stop."},
+	"pullback": {"Pullback buys",
+		"Daily: among strong stocks (top 20% by 120-day return, above their 200-day average), buy up to 10 whose 2-day RSI drops below 10. Sell back above the 5-day average, after 10 days, or on a 10% stop. Trades a lot: fees and tax weigh heavily."},
 }
 
 // Render is the `radar render` step: paper.html next to the dashboard.

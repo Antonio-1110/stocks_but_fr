@@ -168,6 +168,7 @@ func run(db *sql.DB, cfg config.Config, now time.Time) error {
 	db.QueryRow(`SELECT MIN(signal_date) FROM paper_orders WHERE status = 'pending'`).Scan(&since)
 	rm, cb := cfg.Strategy.RevenueMomentum, cfg.Strategy.CycleBottom
 	days := max(cb.PriceMADays, cb.TurnoverDays, rm.StopMADays, staleDays) + 45 // + a month for the rebalance day
+	days = max(days, activeDays(cfg))                                           // issues #70-#73
 	m, err := loadMarket(db, days, since.String, cfg.Paper.MinCoverage)
 	if err != nil {
 		return err
@@ -213,8 +214,17 @@ func strategyFor(name string, cfg config.Config, db *sql.DB) (strategy, error) {
 		return momentum{p, db, cfg.Revenue.MinCoverage}, nil
 	case "cycle_bottom":
 		return cycle{cfg.Strategy.CycleBottom, db, cfg.Revenue.MinCoverage}, nil
+	case "record_revenue":
+		return recordRevenue{cfg.Strategy.RecordRevenue, db, cfg.Revenue.MinCoverage}, nil
+	case "breakout":
+		return breakout{cfg.Strategy.Breakout, db}, nil
+	case "window_dressing":
+		return windowDressing{cfg.Strategy.WindowDressing, db}, nil
+	case "pullback":
+		return pullback{cfg.Strategy.Pullback, db}, nil
 	}
-	return nil, fmt.Errorf("unknown strategy %q (want revenue_momentum, revenue_momentum_foreign or cycle_bottom)", name)
+	return nil, fmt.Errorf("unknown strategy %q (want revenue_momentum, revenue_momentum_foreign, cycle_bottom, "+
+		"record_revenue, breakout, window_dressing or pullback)", name)
 }
 
 func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now time.Time) error {
