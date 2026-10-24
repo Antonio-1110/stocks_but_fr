@@ -47,7 +47,7 @@ func (s momentum) decide(m *market, b *book, h holdings) ([]*order, error) {
 		log.Printf("paper: revenue_momentum: %s; rebalance waits", note)
 		return s.stops(m, b, h), nil
 	}
-	hits, asOf, err := alerts.RevenueMomentum(s.db, at.Add(18*time.Hour), s.p)
+	hits, asOf, err := alerts.RevenueMomentum(s.db, at.Add(18*time.Hour), s.p, day)
 	if err != nil {
 		return nil, err
 	}

@@ -215,21 +215,51 @@ func TestRevenueMomentum(t *testing.T) {
 	p.HighDays, p.ADVDays = 20, 5
 
 	// After the deadline: months 07..09. 2330's weakest is 15, 1101's is 20.
-	got, asOf, err := revenueMomentum(st.DB, day("2026-10-11"), p)
+	got, asOf, err := revenueMomentum(st.DB, day("2026-10-11"), p, "")
 	must(t, err)
 	if tickers(got) != "1101,2330" || !strings.Contains(asOf, "revenue to 2026-09") {
 		t.Fatalf("after deadline: %s (%s)", tickers(got), asOf)
 	}
 	// On the 10th it still ranks on 06..08: 2330's 5% in June fails, 3008 passes (and leads).
-	got, _, err = revenueMomentum(st.DB, day("2026-10-10"), p)
+	got, _, err = revenueMomentum(st.DB, day("2026-10-10"), p, "")
 	must(t, err)
 	if tickers(got) != "3008,1101" {
 		t.Fatalf("before deadline: %s", tickers(got))
 	}
 	// Not enough history: nothing ranked, no error.
 	p.HighDays = 30
-	if got, _, err := revenueMomentum(st.DB, day("2026-10-11"), p); err != nil || len(got) != 0 {
+	if got, _, err := revenueMomentum(st.DB, day("2026-10-11"), p, ""); err != nil || len(got) != 0 {
 		t.Fatalf("short history: %v %v", got, err)
+	}
+}
+
+// A newest day the collectors have only started (issue #68): ranking on it
+// would drop every stock without a price there. The ranking keeps to the
+// last fully collected day instead.
+func TestRevenueMomentumSkipsPartialDay(t *testing.T) {
+	st := openStore(t)
+	seedMarket(t, st)
+	must(t, st.UpsertPrices([]model.Price{{Market: model.MarketTW, Ticker: "1101", Date: day("2026-09-26"),
+		Close: 130, AdjClose: 130, Turnover: 2e7}}))
+	p := config.Default().Strategy.RevenueMomentum
+	p.HighDays, p.ADVDays = 20, 5
+
+	if got, _, err := revenueMomentum(st.DB, day("2026-10-11"), p, ""); err != nil || tickers(got) != "1101" {
+		t.Fatalf("on the partial day: %s %v", tickers(got), err)
+	}
+	through, err := CollectedDay(st.DB, 0.9)
+	must(t, err)
+	if through != "2026-09-25" {
+		t.Fatalf("CollectedDay = %q, want 2026-09-25", through)
+	}
+	got, asOf, err := revenueMomentum(st.DB, day("2026-10-11"), p, through)
+	must(t, err)
+	if tickers(got) != "1101,2330" || !strings.Contains(asOf, "prices 2026-09-25") {
+		t.Fatalf("through %s: %s (%s)", through, tickers(got), asOf)
+	}
+	// Once the day is complete, it is the one used.
+	if d, err := CollectedDay(st.DB, 0); err != nil || d != "2026-09-26" {
+		t.Fatalf("CollectedDay(0) = %q %v", d, err)
 	}
 }
 

@@ -37,6 +37,40 @@ func RevenueReady(db *sql.DB, month time.Time, day time.Time, min float64) (ok b
 	return share >= min, note, nil
 }
 
+// CollectedDay is the newest price day that is fully collected: the newest
+// stored day if it has at least min times the previous day's stock count
+// ([paper] min_coverage, the rule the paper portfolios trade by), else the
+// day before. "" when no prices are stored.
+func CollectedDay(db *sql.DB, min float64) (string, error) {
+	q, err := db.Query(`SELECT date, COUNT(*) FROM prices WHERE market = 'TW'
+		AND date >= (SELECT COALESCE(MAX(date), '') FROM prices WHERE market = 'TW' AND date < (SELECT MAX(date) FROM prices WHERE market = 'TW'))
+		GROUP BY date ORDER BY date DESC`)
+	if err != nil {
+		return "", err
+	}
+	defer q.Close()
+	var dates []string
+	var counts []int
+	for q.Next() {
+		var d string
+		var n int
+		if err := q.Scan(&d, &n); err != nil {
+			return "", err
+		}
+		dates, counts = append(dates, d), append(counts, n)
+	}
+	if err := q.Err(); err != nil {
+		return "", err
+	}
+	if len(dates) == 0 {
+		return "", nil
+	}
+	if len(dates) == 1 || float64(counts[0]) >= min*float64(counts[1]) {
+		return dates[0], nil
+	}
+	return dates[1], nil
+}
+
 // revenueMonth is the newest month a revenue rule ranks on at now: last month
 // once the filing deadline has passed, the month before until then.
 func revenueMonth(now time.Time, deadlineDay int) time.Time {

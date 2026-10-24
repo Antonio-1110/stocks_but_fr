@@ -116,7 +116,11 @@ func ruleFor(name string, cfg config.Config, st *store.Store) (rule, error) {
 	case "revenue_momentum":
 		p := cfg.Strategy.RevenueMomentum
 		return rule{name, "Revenue momentum", p.TopN, p.ExitRank, gate(func(now time.Time) ([]Hit, string, error) {
-			return revenueMomentum(st.DB, now, p)
+			through, err := CollectedDay(st.DB, cfg.Paper.MinCoverage)
+			if err != nil {
+				return nil, "", err
+			}
+			return revenueMomentum(st.DB, now, p, through)
 		})}, nil
 	case "unpriced":
 		a := cfg.Alerts

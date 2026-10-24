@@ -22,8 +22,12 @@ var common = regexp.MustCompile(`^[1-9]\d{3}$`)
 // Before the revenue deadline (the 10th) the strategy still uses the months
 // it ranked on last time, so the list doesn't empty out while companies are
 // announcing; it moves to last month's revenue the day after the deadline.
-func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit, string, error) {
-	dates, err := tradingDays(db, `prices`, p.HighDays)
+//
+// through is the newest price day to rank on, "" for the newest stored. A
+// day the collectors are still filling holds only part of the market, so
+// callers pass the last fully collected one (issue #68).
+func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum, through string) ([]Hit, string, error) {
+	dates, err := tradingDays(db, `prices`, p.HighDays, through)
 	if err != nil {
 		return nil, "", err
 	}
@@ -62,7 +66,7 @@ func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit
 	q.Close()
 
 	q, err = db.Query(`SELECT ticker, date, close, adj_close, turnover FROM prices
-		WHERE market = 'TW' AND date >= ? ORDER BY ticker, date`, start)
+		WHERE market = 'TW' AND date >= ? AND date <= ? ORDER BY ticker, date`, start, latest)
 	if err != nil {
 		return nil, "", err
 	}
@@ -200,9 +204,13 @@ func revenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit
 	return hits, asOf, nil
 }
 
-// tradingDays returns the market's last n dates in table, newest first.
-func tradingDays(db *sql.DB, table string, n int) ([]string, error) {
-	q, err := db.Query(`SELECT DISTINCT date FROM `+table+` WHERE market = 'TW' ORDER BY date DESC LIMIT ?`, n)
+// tradingDays returns the market's last n dates in table up to through
+// ("" for no limit), newest first.
+func tradingDays(db *sql.DB, table string, n int, through string) ([]string, error) {
+	if through == "" {
+		through = "9999-12-31"
+	}
+	q, err := db.Query(`SELECT DISTINCT date FROM `+table+` WHERE market = 'TW' AND date <= ? ORDER BY date DESC LIMIT ?`, through, n)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +228,7 @@ func tradingDays(db *sql.DB, table string, n int) ([]string, error) {
 
 // trustNet sums 投信 net shares over the last days flow dates.
 func trustNet(db *sql.DB, days int) (map[string]int64, error) {
-	dates, err := tradingDays(db, `institutional_flows`, days)
+	dates, err := tradingDays(db, `institutional_flows`, days, "")
 	if err != nil || len(dates) == 0 {
 		return map[string]int64{}, err
 	}
@@ -247,7 +255,7 @@ func trustNet(db *sql.DB, days int) (map[string]int64, error) {
 // (intensity() in backtest/strategies/foreign_flow.py). A day's NTD is its
 // net shares times that day's close.
 func foreignIntensity(db *sql.DB, days int) (map[string]float64, error) {
-	dates, err := tradingDays(db, `institutional_flows`, days)
+	dates, err := tradingDays(db, `institutional_flows`, days, "")
 	if err != nil || len(dates) == 0 {
 		return map[string]float64{}, err
 	}
@@ -302,7 +310,8 @@ func toAny(s []string) []any {
 }
 
 // RevenueMomentum is the same ranking for other packages: the paper portfolio
-// (issue #35) trades exactly what the alerts announce.
-func RevenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum) ([]Hit, string, error) {
-	return revenueMomentum(db, now, p)
+// (issue #35) trades exactly what the alerts announce. It passes the day it
+// trades on as through.
+func RevenueMomentum(db *sql.DB, now time.Time, p config.RevenueMomentum, through string) ([]Hit, string, error) {
+	return revenueMomentum(db, now, p, through)
 }
