@@ -20,6 +20,11 @@ on:
     # the close and the 三大法人 report.
     - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      alpha:
+        description: "Run the alpha lab (#76) even if it ran this week"
+        type: boolean
+        default: false
 
 env:
   DATA_TAG: data
@@ -172,7 +177,8 @@ jobs:
         run: ./radar validate
 
       # Once a week the alpha lab (#76) re-tests every short-term signal on the
-      # fresh data and stores the leaderboard in radar.db for the Alpha page.
+      # fresh data and stores the leaderboard in radar.db for the Alpha page
+      # (run it now: Run workflow with "alpha" ticked).
       # It takes about 6 minutes; other runs skip it in seconds. A failure
       # never stops the run.
       - uses: actions/setup-python@v5
@@ -187,7 +193,12 @@ jobs:
         working-directory: backtest
         run: |
           pip install -q -e .
-          python -m radar_backtest.alpha --if-older-than 6.5
+          python -m radar_backtest.alpha --if-older-than "${{ inputs.alpha && '0' || '6.5' }}" --report alpha.md
+          # The leaderboard also goes to the run's summary page.
+          if [ -f alpha.md ]; then
+            cat alpha.md
+            cat alpha.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Upload under a temporary name, then swap, so a failed upload never
       # leaves the release without a database.
