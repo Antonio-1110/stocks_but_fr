@@ -1,6 +1,6 @@
-{{/* Shared pieces of the dashboard's own pages. The paper, calendar and
-     health pages live in other packages and repeat the nav bar markup; keep
-     the link list the same in all five. */}}
+{{/* Shared pieces of the dashboard's own pages. The paper, calendar,
+     health and alpha pages live in other packages and repeat the nav bar markup; keep
+     the link list the same in all six. */}}
 {{define "head"}}<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.}}</title>
@@ -15,6 +15,7 @@
   <a href="index.html"{{if eq . "overview"}} aria-current="page"{{end}}>Overview</a>
   <a href="screener.html"{{if eq . "screener"}} aria-current="page"{{end}}>Screener</a>
   <a href="paper.html"{{if eq . "paper"}} aria-current="page"{{end}}>Paper</a>
+  <a href="alpha.html"{{if eq . "alpha"}} aria-current="page"{{end}}>Alpha</a>
   <a href="calendar.html"{{if eq . "calendar"}} aria-current="page"{{end}}>Calendar</a>
   <a href="health.html"{{if eq . "health"}} aria-current="page"{{end}}>Health</a>
 </nav>{{end}}

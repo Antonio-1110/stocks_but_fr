@@ -236,3 +236,12 @@ entry_rsi = 10.0               # buy when RSI(2) is below this, most oversold fi
 exit_ma_days = 5               # sell when the close is back above its 5-day average...
 max_hold_days = 10             # ...or after 10 trading days
 stop_loss = 0.10
+
+[alpha]                        # issue #76: the alpha lab tests every signal in backtest/radar_backtest/signals.py
+horizons = [1, 5, 10, 20]      # holding periods, trading days (buy at the next open, sell at the open this many days later)
+min_adv_ntd = 20_000_000       # universe: common stocks with at least this 20-day average traded value, NTD...
+min_price = 10                 # ...and a close of at least this
+min_stocks = 30                # a score signal needs this many ranked stocks on a day for that day to count
+recent_days = 250              # the "last 12 months" column, trading days
+family_alpha = 0.05            # chance of any false "passes" across all signal x horizon pairs (Bonferroni)
+picks = 10                     # today's names shown per working signal

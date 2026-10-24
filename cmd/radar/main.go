@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/alerts"
+	"github.com/Antonio-1110/stocks_but_fr/internal/alpha"
 	"github.com/Antonio-1110/stocks_but_fr/internal/calendar"
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
@@ -45,6 +46,7 @@ var renderers = []step{
 	{"calendar", calendar.Render}, // after site: reuses its static/style.css
 	{"paper", paper.Render},       // after site: reuses its static/style.css
 	{"health", validate.Render},   // after site: reuses its static/style.css
+	{"alpha", alpha.Render},       // after site: reuses its static/style.css
 }
 
 func main() {

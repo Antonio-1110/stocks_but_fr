@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alpha lab</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* Alpha-page-only rules; theme tokens come from static/style.css. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 0 0 4px; }
+.tile { border: 1px solid var(--panel-edge); padding: 8px 10px; min-width: 0; }
+.tile dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.tile dd { margin: 2px 0 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+.tile dd small { display: block; font-size: .72rem; color: var(--muted); }
+.ok { color: var(--down); }
+.warn { color: var(--yellow); }
+.lab td.n { text-align: right; white-space: nowrap; }
+.lab td small { display: block; color: var(--muted); font-size: .72rem; }
+.lab thead th { cursor: default; }
+.picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.pick { border: 1px solid var(--panel-edge); padding: 8px 10px; min-width: 0; }
+.pick h3 { margin: 0 0 2px; font-size: .9rem; }
+.pick p { margin: 0 0 6px; font-size: .75rem; }
+.pick ol { margin: 0; padding-left: 1.6em; columns: 2; font-size: .85rem; }
+.how { max-width: 72ch; }
+.how li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html">Paper</a>
+  <a href="alpha.html" aria-current="page">Alpha</a>
+  <a href="calendar.html">Calendar</a>
+  <a href="health.html">Health</a>
+</nav>
+<header>
+  <h1 data-text="Alpha lab">Alpha lab</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{if .RunAt}} <span class="sep">//</span> <b>lab run {{.RunAt}}</b> <span class="sep">//</span> <b>prices to {{.DataEnd}}</b>{{end}}</p>
+</header>
+
+<main>
+{{if not .RunAt}}
+<section class="panel lab">
+  <h2>No run yet</h2>
+  <p class="muted">The daily run tests every signal once a week; results appear here after the first one.</p>
+</section>
+{{else}}
+<section class="panel lab">
+  <h2>Short-term signals, tested</h2>
+  <dl class="tiles">
+    <div class="tile"><dt>Signals</dt><dd>{{.Signals}}<small>{{len .All}} signal × holding pairs</small></dd></div>
+    <div class="tile"><dt>Passes</dt><dd><span class="ok">{{index .Counts "passes"}}</span><small>strong 2012–19, confirmed 2020+</small></dd></div>
+    <div class="tile"><dt>Promising</dt><dd><span class="ok">{{index .Counts "promising"}}</span><small>t ≥ 2 in both periods</small></dd></div>
+    <div class="tile"><dt>Recent only</dt><dd><span class="warn">{{index .Counts "recent only"}}</span><small>works from 2020 only</small></dd></div>
+    <div class="tile"><dt>Hurdle</dt><dd>t ≥ {{num .Hurdle}}<small>for {{len .All}} tries at 5%</small></dd></div>
+    <div class="tile"><dt>Round trip</dt><dd>{{pct0 .Cost}}<small>fee × discount ×2 + tax</small></dd></div>
+  </dl>
+  <details>
+  <summary>How to read this</summary>
+  <ul class="how muted">
+    <li>Every trading day, each signal ranks the liquid common stocks (20M NTD a day traded, price ≥ 10). We buy at the next open and sell at the open after <b>Hold</b> trading days. A buy at a limit-up open can't fill, so it doesn't count.</li>
+    <li><b>Net</b> is the average trade's return above the average liquid stock, after one round trip of fees and tax. Score signals trade their top 10%; event signals trade every stock with the event.</li>
+    <li><b>t</b> says how sure: around 2 can be luck when many ideas are tried. <b>Passes</b> needs t ≥ {{num .Hurdle}} in 2012–2019 and t ≥ 2 with a positive net from 2020, which nothing here was tuned on.</li>
+    <li><b>A day late</b> is the 2020+ net when you act one day after the signal. If it drops to nothing, the edge is only there for whoever moves first.</li>
+    <li>Flows data starts in 2013, so flow signals have a shorter design period.</li>
+  </ul>
+  </details>
+</section>
+
+{{if .Picks}}
+<section class="panel lab">
+  <h2>Today's names from signals that work</h2>
+  <p class="muted">The top 10 stocks (or today's events) for each signal rated passes, promising or recent only, at its best holding period. A list to research, not a buy list.</p>
+  <div class="picks">
+  {{range .Picks}}
+    <div class="pick">
+      <h3>{{.Result.Label}}</h3>
+      <p class="muted"><span class="{{slug .Result.Verdict}}">{{.Result.Verdict}}</span> · hold {{.Result.Horizon}}d · 2020+ net {{pct .Result.Test.Net}}/trade · {{.Date}}</p>
+      <ol>{{range .Picks}}<li><a href="{{.Link}}" target="_blank" rel="noopener">{{.Ticker}}</a> {{.Name}}</li>{{end}}</ol>
+    </div>
+  {{end}}
+  </div>
+</section>
+{{end}}
+
+<section class="panel lab">
+  <h2>Leaderboard</h2>
+  <p class="muted">Each signal at its best holding period. Net per trade, t in brackets.</p>
+  <table>
+    <thead><tr><th>Verdict</th><th>Signal</th><th>Hold</th><th>2012–19 net</th><th>2020+ net</th><th>A day late</th><th>Last 12 months</th><th>2020+ hit</th><th>2020+ trades</th></tr></thead>
+    <tbody>
+    {{range .Best}}{{template "row" .}}{{end}}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel lab">
+  <details>
+  <summary><h2>All results</h2></summary>
+  <p class="muted">Every signal at every holding period. IC is the average daily rank correlation between the signal and the next days' excess return (score signals only).</p>
+  <table>
+    <thead><tr><th>Verdict</th><th>Signal</th><th>Hold</th><th>2012–19 net</th><th>2020+ net</th><th>A day late</th><th>Last 12 months</th><th>2020+ hit</th><th>2020+ trades</th></tr></thead>
+    <tbody>
+    {{range .All}}{{template "row" .}}{{end}}
+    </tbody>
+  </table>
+  </details>
+  <p class="muted">Data snapshot {{.Snapshot}} · lab code {{.Code}} · <code>backtest/radar_backtest/alpha.py</code></p>
+</section>
+{{end}}
+</main>
+</body>
+</html>
+
+{{define "stat"}}{{if .HasEdge}}<span class="{{sign .Net}}">{{pct .Net}}</span> <small>t {{num .EdgeT}}{{if .HasIC}} · IC {{ic .IC}}{{end}}</small>{{else}}–{{end}}{{end}}
+
+{{define "row"}}<tr>
+  <td><span class="{{slug .Verdict}}">{{.Verdict}}</span></td>
+  <td>{{.Label}}<small>{{.Signal}} · {{.Family}}</small></td>
+  <td class="n">{{.Horizon}}d</td>
+  <td class="n">{{template "stat" .Design}}</td>
+  <td class="n">{{template "stat" .Test}}</td>
+  <td class="n">{{if .HasLate}}<span class="{{sign .LateNet}}">{{pct .LateNet}}</span>{{else}}–{{end}}</td>
+  <td class="n">{{template "stat" .Recent}}</td>
+  <td class="n">{{if .Test.Valid}}{{pct0 .Test.Hit}}{{else}}–{{end}}</td>
+  <td class="n">{{if .Test.Valid}}{{count .Test.N}}{{else}}–{{end}}</td>
+</tr>{{end}}

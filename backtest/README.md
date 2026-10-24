@@ -26,6 +26,24 @@ revenue only after its `announced_on` date, flows up to that day, and the
 companies listed that day. Return `{ticker: weight}` (fractions of equity,
 summing to at most 1) to rebalance at the next open, or `None` to do nothing.
 
+## Alpha lab (issue #76)
+
+```sh
+python3 -m radar_backtest.alpha --report alpha.md      # all signals, about 6 minutes
+python3 -m radar_backtest.alpha --only trust_5d --no-save
+```
+
+Tests every signal in `radar_backtest/signals.py` (price, volume, 外資/投信/自營
+flows, monthly revenue, ex-dividend dates) for 1, 5, 10 and 20-day edge: rank
+IC and top-decile (or event) return above the average liquid stock, net of a
+round trip of `[costs.tw]`, in the design period, the test period and the last
+12 months, plus the same edge acted on a day late. A "passes" verdict needs a
+Bonferroni-sized t-stat in 2012–2019 and t >= 2 from 2020. Results go to the
+`alpha_results` and `alpha_picks` tables, which the dashboard's Alpha page
+shows; the daily run refreshes them once a week. Settings: `[alpha]` in
+radar.toml. To add a signal, write a function of `Inputs` and add it to
+`SIGNALS`; its direction is fixed before looking at results.
+
 ## What the engine assumes
 
 - Fills at the next trading day's open, on dividend/split-adjusted prices, with
