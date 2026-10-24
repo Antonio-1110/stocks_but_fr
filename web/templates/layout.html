@@ -1,0 +1,20 @@
+{{/* Shared pieces of the dashboard's own pages. The paper, calendar and
+     health pages live in other packages and repeat the nav bar markup; keep
+     the link list the same in all five. */}}
+{{define "head"}}<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.}}</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">{{end}}
+
+{{define "nav"}}<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html"{{if eq . "overview"}} aria-current="page"{{end}}>Overview</a>
+  <a href="screener.html"{{if eq . "screener"}} aria-current="page"{{end}}>Screener</a>
+  <a href="paper.html"{{if eq . "paper"}} aria-current="page"{{end}}>Paper</a>
+  <a href="calendar.html"{{if eq . "calendar"}} aria-current="page"{{end}}>Calendar</a>
+  <a href="health.html"{{if eq . "health"}} aria-current="page"{{end}}>Health</a>
+</nav>{{end}}

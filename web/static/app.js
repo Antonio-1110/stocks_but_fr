@@ -1,4 +1,4 @@
-// Sorting and filtering for the company table. No dependencies.
+// Sorting, filtering and paging for the screener's company table. No dependencies.
 (function () {
   var table = document.getElementById("list");
   if (!table) return;
@@ -10,6 +10,9 @@
   var showLow = document.getElementById("showlow");
   var headers = table.tHead.rows[0].cells;
   var view = location.hash === "#unpriced" ? "unpriced" : "growth";
+  var moreCols = document.getElementById("morecols");
+  var more = document.getElementById("more");
+  var page = 50, limit = page; // matching rows shown before "show more"
 
   function sortKey(row, col) {
     var cell = row.cells[col];
@@ -42,6 +45,7 @@
         ? th.getAttribute("aria-sort") === "descending"
         : type === "text" || col === 0;
       sortBy(col, asc);
+      filter();
     });
   });
 
@@ -75,6 +79,7 @@
     });
     history.replaceState(null, "", v === "unpriced" ? "#unpriced" : location.pathname + location.search);
     sortBy(0, true);
+    limit = page;
     filter();
   }
   document.querySelectorAll(".views [data-view]").forEach(function (b) {
@@ -84,22 +89,27 @@
   function filter() {
     var words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     var ind = industry.value;
-    var shown = 0;
+    var matched = 0;
     rows.forEach(function (r) {
       var text = (r.getAttribute("data-search") || "").toLowerCase();
       var ok = (view === "unpriced" ? r.hasAttribute("data-unpriced-rank")
           : showLow.checked || !r.hasAttribute("data-lowbase")) &&
         (!ind || r.getAttribute("data-industry") === ind) &&
         words.every(function (w) { return text.indexOf(w) !== -1; });
-      r.hidden = !ok;
-      if (ok) shown++;
+      if (ok) matched++;
+      r.hidden = !ok || matched > limit;
     });
+    more.hidden = matched <= limit;
     var empty = document.getElementById("unpriced-empty");
     empty.hidden = !(view === "unpriced" && !rows.some(function (r) { return r.hasAttribute("data-unpriced-rank"); }));
-    count.textContent = shown === rows.length ? rows.length : shown + " / " + rows.length;
+    count.textContent = matched === rows.length ? rows.length : matched + " / " + rows.length;
   }
-  q.addEventListener("input", filter);
-  industry.addEventListener("change", filter);
-  showLow.addEventListener("change", filter);
+  function refilter() { limit = page; filter(); }
+  q.addEventListener("input", refilter);
+  industry.addEventListener("change", refilter);
+  showLow.addEventListener("change", refilter);
+  document.getElementById("showmore").addEventListener("click", function () { limit += page; filter(); });
+  document.getElementById("showall").addEventListener("click", function () { limit = Infinity; filter(); });
+  moreCols.addEventListener("change", function () { table.classList.toggle("compact", !moreCols.checked); });
   setView(view); // also hides low-base rows, which start hidden
 })();

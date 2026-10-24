@@ -16,6 +16,7 @@
   --mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --display: "Orbitron", "Share Tech Mono", system-ui, sans-serif;
   --cjk: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --navh: 44px; /* sticky table headers sit just under the nav bar */
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -44,8 +45,28 @@ b { font-weight: 600; }
 .up { color: var(--up); text-shadow: 0 0 6px rgba(255, 59, 107, 0.45); }
 .down { color: var(--down); text-shadow: 0 0 6px rgba(43, 255, 136, 0.35); }
 
+/* Nav bar: the same five links on every page. */
+.topnav {
+  position: sticky; top: 0; z-index: 20; height: var(--navh); margin: 0 calc(-1 * clamp(10px, 2vw, 28px));
+  padding: 0 clamp(10px, 2vw, 28px); display: flex; align-items: center; gap: 4px;
+  background: rgba(7, 6, 13, 0.94); border-bottom: 1px solid var(--panel-edge);
+  backdrop-filter: blur(6px); overflow-x: auto; scrollbar-width: none; white-space: nowrap;
+}
+.topnav::-webkit-scrollbar { display: none; }
+.topnav a {
+  font: 600 .72rem/1 var(--display); text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); padding: 9px 12px; border: 1px solid transparent;
+}
+.topnav a:hover { color: var(--yellow); }
+.topnav a[aria-current="page"] {
+  color: var(--bg); background: var(--cyan); border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.5); text-shadow: none;
+}
+.topnav .brand { color: var(--magenta); letter-spacing: .16em; margin-right: auto; padding-left: 0; }
+.topnav .brand span { color: var(--cyan); }
+
 /* Header */
-header { padding: 22px 0 6px; border-bottom: 1px solid var(--panel-edge); position: relative; }
+header { padding: 16px 0 6px; border-bottom: 1px solid var(--panel-edge); position: relative; }
 header::after {
   content: ""; position: absolute; left: 0; bottom: -1px; height: 2px; width: min(420px, 60%);
   background: linear-gradient(90deg, var(--magenta), var(--cyan), transparent);
@@ -73,7 +94,7 @@ h1::after { color: var(--yellow); transform: translate(-2px, 0); clip-path: inse
   margin-top: 18px; padding: 12px clamp(8px, 1.2vw, 16px) 14px; background: var(--panel);
   border: 1px solid var(--panel-edge); position: relative;
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
-  box-shadow: inset 0 0 40px rgba(185, 103, 255, 0.06);
+  box-shadow: inset 0 0 40px rgba(185, 103, 255, 0.06); scroll-margin-top: calc(var(--navh) + 8px);
 }
 .panel::before {
   content: ""; position: absolute; top: 0; left: 0; width: 64px; height: 2px; background: var(--yellow);
@@ -126,7 +147,7 @@ table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nu
 th, td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 td.num { white-space: nowrap; }
 thead th {
-  position: sticky; top: 0; z-index: 1; background: #120e24; color: var(--cyan);
+  position: sticky; top: var(--navh); z-index: 1; background: #120e24; color: var(--cyan);
   font: 600 .68rem/1.25 var(--display); text-transform: uppercase; letter-spacing: .06em;
   border-bottom: 1px solid var(--cyan); cursor: pointer; user-select: none; vertical-align: bottom;
 }
@@ -156,11 +177,58 @@ tbody tr:hover { background: rgba(0, 240, 255, 0.07); box-shadow: inset 2px 0 0 
 tr.lowbase td { opacity: .55; }
 tr.lowbase:hover td { opacity: 1; }
 td.lbval { text-decoration: underline dotted var(--yellow); text-underline-offset: 3px; }
-.toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; cursor: pointer; }
+.toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; cursor: pointer; white-space: nowrap; }
 .toggle input { accent-color: var(--yellow); }
 .ind { color: var(--muted); font-family: var(--cjk); font-size: .85rem; }
 
 footer { margin-top: 24px; font-size: .78rem; }
+
+/* Screener: secondary columns stay hidden until "more columns" is ticked, and
+   only the first rows show until "show more". */
+table.compact .x { display: none; }
+.more { display: flex; gap: 8px; margin: 10px 0 0; }
+.more button, .go {
+  font: 600 .68rem/1 var(--display); text-transform: uppercase; letter-spacing: .08em; cursor: pointer;
+  padding: 8px 12px; color: var(--cyan); background: rgba(0, 0, 0, 0.45); border: 1px solid var(--panel-edge);
+}
+.more button:hover { color: var(--yellow); border-color: var(--yellow); }
+
+/* Overview: one card per page, each a short summary with a link to the rest. */
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.cards .wide { grid-column: 1 / -1; }
+.card h2 { justify-content: space-between; flex-wrap: wrap; }
+.go { padding: 5px 8px; font-size: .6rem; letter-spacing: .06em; }
+.go:hover { border-color: var(--yellow); }
+table.mini thead th { position: static; cursor: default; }
+table.mini td { vertical-align: middle; }
+table.mini td a { font-family: var(--cjk), var(--mono); }
+table.mini td a b { color: var(--cyan); font-family: var(--mono); }
+.note { font-size: .75rem; margin: 8px 0 0; }
+.events { list-style: none; margin: 0; padding: 0; }
+.events li { padding: 5px 0; border-bottom: 1px solid var(--line); font-family: var(--cjk), var(--mono); }
+.events .d { color: var(--muted); font-family: var(--mono); }
+.events .k { color: var(--yellow); font-size: .8rem; margin: 0 4px; }
+.events a b { color: var(--cyan); font-family: var(--mono); }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin: 0; }
+.facts div { border-left: 2px solid var(--violet); background: rgba(185, 103, 255, 0.06); padding: 6px 8px; min-width: 0; }
+.facts dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.ok { color: var(--down); }
+.bad { color: var(--up); }
+.warn { color: var(--yellow); }
+
+/* Folded details: the summary line is the section heading. */
+details > summary { cursor: pointer; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary h2, details > summary h3 { display: inline-flex; margin: 0; }
+details > summary::before { content: "+ "; color: var(--magenta); font-family: var(--mono); }
+details[open] > summary::before { content: "- "; }
+details[open] > summary { margin-bottom: 10px; }
+details > summary:hover h2, details > summary:hover h3 { color: var(--yellow); }
+
+@media (max-width: 900px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Narrow laptops and tablets: shrink type a little more before giving up width. */
 @media (max-width: 1100px) {
@@ -196,6 +264,18 @@ footer { margin-top: 24px; font-size: .78rem; }
     text-transform: uppercase; letter-spacing: .04em; text-shadow: none;
   }
   td.ind[data-label]::before { content: none; }
+  .topnav { justify-content: space-between; gap: 0; }
+  .topnav a { padding: 8px 5px; font-size: .58rem; letter-spacing: .03em; }
+  .topnav .brand { display: none; }
+  thead { top: var(--navh); }
+  /* Overview tables are short: keep them tables. */
+  table.mini { display: table; }
+  table.mini thead { display: table-header-group; position: static; padding: 0; background: none; }
+  table.mini tbody { display: table-row-group; }
+  table.mini thead tr, table.mini tbody tr { display: table-row; padding: 0; border: 0; }
+  table.mini th, table.mini td, table.mini td.num { display: table-cell; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+  table.mini td.num { text-align: right; }
+  table.mini thead th { border: 0; border-bottom: 1px solid var(--cyan); font-size: .6rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -32,15 +32,25 @@ type Page struct {
 	Industries  []string
 	Backtest    []Field
 	Unpriced    config.Unpriced
+
+	// Overview cards (index.html).
+	TopGrowth     []Row
+	TopUnpriced   []Row
+	Paper         []PaperCard
+	Upcoming      []UpcomingEvent
+	UpcomingTotal int
+	UpcomingDays  int
+	Health        *HealthCard
 }
 
-// Render is the `radar render` step: it writes index.html and the static
-// assets into cfg.Run.PublicDir.
+// Render is the `radar render` step: it writes index.html (the overview),
+// screener.html (the full company table) and the static assets into
+// cfg.Run.PublicDir.
 func Render(_ context.Context, cfg config.Config, st *store.Store) error {
-	return render(st, cfg.Run.PublicDir, time.Now(), cfg.Revenue.LowBase, cfg.Site.Unpriced)
+	return render(st, cfg.Run.PublicDir, time.Now(), cfg.Revenue.LowBase, cfg.Site.Unpriced, cfg.Paper.Strategies)
 }
 
-func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u config.Unpriced) error {
+func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u config.Unpriced, paperNames []string) error {
 	rows, latest, err := loadRows(st, model.MarketTW, now, lb, u)
 	if err != nil {
 		return err
@@ -57,6 +67,19 @@ func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u con
 		Industries:  industries(rows),
 		Backtest:    bt,
 		Unpriced:    u,
+
+		TopGrowth:    topGrowth(rows, topShown),
+		TopUnpriced:  topUnpriced(rows, topShown),
+		UpcomingDays: upcomingDays,
+	}
+	if page.Paper, err = loadPaper(st.DB, paperNames); err != nil {
+		return fmt.Errorf("paper summary: %w", err)
+	}
+	if page.Upcoming, page.UpcomingTotal, err = loadUpcoming(st.DB, model.MarketTW, now); err != nil {
+		return fmt.Errorf("upcoming events: %w", err)
+	}
+	if page.Health, err = loadHealth(st.DB); err != nil {
+		return fmt.Errorf("health summary: %w", err)
 	}
 
 	tmpl, err := template.New("").Funcs(funcs).ParseFS(web.FS, "templates/*.html")
@@ -69,13 +92,23 @@ func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u con
 	if err := copyStatic(dir); err != nil {
 		return err
 	}
-	// Write to a temp file and rename, so a failed render never leaves a half page.
-	tmp := filepath.Join(dir, ".index.html.tmp")
+	for _, name := range []string{"index.html", "screener.html"} {
+		if err := writePage(tmpl, dir, name, page); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writePage writes to a temp file and renames, so a failed render never
+// leaves a half page.
+func writePage(tmpl *template.Template, dir, name string, page Page) error {
+	tmp := filepath.Join(dir, "."+name+".tmp")
 	f, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
-	if err := tmpl.ExecuteTemplate(f, "index.html", page); err != nil {
+	if err := tmpl.ExecuteTemplate(f, name, page); err != nil {
 		f.Close()
 		os.Remove(tmp)
 		return err
@@ -83,7 +116,7 @@ func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u con
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(dir, "index.html"))
+	return os.Rename(tmp, filepath.Join(dir, name))
 }
 
 func copyStatic(dir string) error {
@@ -117,7 +150,19 @@ func industries(rows []Row) []string {
 }
 
 var funcs = template.FuncMap{
-	"join":         strings.Join,
+	"join": strings.Join,
+	// ret formats a fraction (0.123) as a signed percentage.
+	"ret": func(f float64) string { return fmt.Sprintf("%+.2f%%", f*100) },
+	"retSign": func(f float64) string {
+		switch {
+		case f > 0:
+			return "up"
+		case f < 0:
+			return "down"
+		}
+		return ""
+	},
+	"sub":          func(a, b float64) float64 { return a - b },
 	"unpricedNote": unpricedNote,
 	// pct formats a percentage with a sign; nil renders as a dash.
 	"pct": func(p *float64) string {

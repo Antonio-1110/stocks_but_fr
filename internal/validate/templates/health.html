@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="static/style.css">
 <style>
 /* Health-page-only rules; theme tokens come from static/style.css. */
-.nav { margin: 0 0 8px; font-size: .85rem; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0 0 4px; }
 .tile { border: 1px solid var(--panel-edge); padding: 8px 10px; min-width: 0; }
 .tile dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
@@ -38,17 +37,23 @@
 </head>
 <body>
 <div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html">Paper</a>
+  <a href="calendar.html">Calendar</a>
+  <a href="health.html" aria-current="page">Health</a>
+</nav>
 <header>
-  <p class="sys">SYS://TW-RADAR/HEALTH <span class="blink">_</span></p>
   <h1 data-text="Data health">Data health</h1>
   <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{with .Latest}} <span class="sep">//</span> <b>snapshot {{stamp .ID}}</b>{{end}}</p>
-  <p class="nav"><a href="index.html">&lt; back to companies</a></p>
 </header>
 
 <main>
 {{with .Latest}}
 <section class="panel health">
-  <h2><span class="idx">01</span> Latest snapshot</h2>
+  <h2>Latest snapshot</h2>
   <dl class="tiles">
     <div class="tile"><dt>Hard checks</dt><dd>{{if eq (failed .Hard) 0}}<span class="ok">all pass</span>{{else}}<span class="bad">{{failed .Hard}} failed</span>{{end}}<small>a failure stops the publish</small></dd></div>
     <div class="tile"><dt>Soft checks</dt><dd>{{if eq (failed .Soft) 0}}<span class="ok">all clear</span>{{else}}<span class="warn">{{failed .Soft}} to look at</span>{{end}}<small>reported, not blocking</small></dd></div>
@@ -60,7 +65,8 @@
 </section>
 
 <section class="panel health">
-  <h2><span class="idx">02</span> Checks</h2>
+  <details{{if or (failed .Hard) (failed .Soft)}} open{{end}}>
+  <summary><h2>Checks</h2></summary>
   <table>
     <thead><tr><th>Check</th><th>Kind</th><th>Result</th><th class="d">Detail</th></tr></thead>
     <tbody>
@@ -69,17 +75,19 @@
     {{end}}
     </tbody>
   </table>
+  </details>
 </section>
 {{else}}
 <section class="panel health">
-  <h2><span class="idx">01</span> No snapshot yet</h2>
+  <h2>No snapshot yet</h2>
   <p class="muted">The next daily run validates the database and records its first snapshot here.</p>
 </section>
 {{end}}
 
 {{if .History}}
 <section class="panel health">
-  <h2><span class="idx">03</span> Recent snapshots</h2>
+  <details>
+  <summary><h2>Recent snapshots</h2></summary>
   <p class="muted">A row count that stops growing during a backfill, or falls, shows up here first.</p>
   <table>
     <thead><tr><th>Snapshot</th><th>Prices</th><th>Revenue</th><th class="d">Flows</th><th>Coverage</th></tr></thead>
@@ -88,6 +96,7 @@
     {{end}}
     </tbody>
   </table>
+  </details>
 </section>
 {{end}}
 </main>

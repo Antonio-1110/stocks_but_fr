@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+{{template "head" "Screener · Taiwan radar"}}
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+{{template "nav" "screener"}}
+<header>
+  <h1 data-text="Screener">Screener</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{if .PriceDate}} <span class="sep">//</span> <b>prices as of {{.PriceDate}}</b>{{end}}</p>
+</header>
+
+<main>
+<section class="panel">
+  <h2>Companies <span class="count" id="count">{{len .Rows}}</span></h2>
+  {{if .Rows}}
+  <div class="views" role="tablist" aria-label="Ranking">
+    <button type="button" role="tab" data-view="growth" aria-selected="true">Fastest growth</button>
+    <button type="button" role="tab" data-view="unpriced" aria-selected="false">Not yet priced in</button>
+  </div>
+  <div class="filters">
+    <input id="q" type="search" placeholder="&gt; filter: ticker, name, industry" aria-label="Filter">
+    <select id="industry" aria-label="Industry">
+      <option value="">All industries</option>
+      {{range .Industries}}<option>{{.}}</option>{{end}}
+    </select>
+    <label class="toggle" title="Revenue YoY measured against a tiny base last year"><input id="showlow" type="checkbox"> show low-base outliers</label>
+    <label class="toggle" title="52-week high, 投信 and 外資 buying, traded value"><input id="morecols" type="checkbox"> more columns</label>
+  </div>
+  <p class="muted hint" data-for="unpriced" hidden>Strong or speeding-up revenue growth that the price hasn't caught up with yet: ranked on 3-month revenue YoY and its acceleration, a small 1-month price move, distance below the 52-week high, and little 投信/外資 buying so far. Only stocks with a price, at least {{.Unpriced.MinGrowthPct}}% growth and enough trading are ranked; low-base outliers are left out. Hover a rank for its score.</p>
+  <p class="muted hint" data-for="growth">Ranked by 3-month average revenue YoY. Stocks whose growth is off a tiny revenue base last year are marked <span class="lb">LOW BASE</span> and left out of the ranking. Tap a column header to sort.</p>
+  <p class="muted empty" id="unpriced-empty" hidden>No stock qualifies yet. This view needs daily prices, and the price backfill hasn't reached individual stocks so far; it fills in on its own as prices arrive.</p>
+  <table id="list" class="compact">
+    <thead><tr>
+      <th data-type="num" class="num">#</th>
+      <th data-type="text">Company</th>
+      <th data-type="text">Industry</th>
+      <th data-type="num" class="num">Price</th>
+      <th data-type="num" class="num" title="Price change over 21 trading days">1M</th>
+      <th data-type="num" class="num" title="Revenue YoY, latest announced month">Rev YoY</th>
+      <th data-type="num" class="num" title="Revenue YoY, average of last 3 announced months">Rev 3M avg</th>
+      <th data-type="num" class="num x" title="Distance from 52-week high">vs 52w high</th>
+      <th data-type="num" class="num x" title="投信 net buy, last 10 trading days (張)">投信 10d</th>
+      <th data-type="num" class="num x" title="外資 net buy, last 10 trading days (張)">外資 10d</th>
+      <th data-type="num" class="num x" title="Average daily traded value, 20 days">Value 20d</th>
+    </tr></thead>
+    <tbody>
+    {{range .Rows}}{{$l := .Links}}
+    <tr data-industry="{{.Industry}}" data-search="{{.Ticker}} {{.Name}} {{.Industry}}"{{if .LowBase}} class="lowbase" data-lowbase{{end}}{{if .UnpricedRank}} data-unpriced-rank="{{.UnpricedRank}}" data-unpriced-note="{{unpricedNote .}}"{{end}}>
+      {{if .LowBase}}<td class="num rank" data-sort="" title="Low base: {{join .LowBaseNotes "; "}}"><span class="lb">LB</span></td>{{else}}<td class="num rank" data-sort="{{.Rank}}">{{.Rank}}</td>{{end}}
+      <td class="co" data-sort="{{.Ticker}}">
+        <a class="name" href="{{$l.Goodinfo}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b> {{.Name}}</a>
+        <span class="links"><a href="{{$l.Goodinfo}}" target="_blank" rel="noopener">Goodinfo</a><a href="{{$l.Yahoo}}" target="_blank" rel="noopener">Yahoo</a><a href="{{$l.MOPS}}" target="_blank" rel="noopener">MOPS</a></span>
+      </td>
+      <td class="ind" data-label="Industry">{{.Industry}}</td>
+      <td class="num" data-label="Price" data-sort="{{sortVal .LastClose}}">{{price .LastClose}}</td>
+      <td class="num {{sign .Change1M}}" data-label="1M" data-sort="{{sortVal .Change1M}}">{{pct .Change1M}}</td>
+      <td class="num {{sign .RevYoY}}{{if .RevYoYLowBase}} lbval{{end}}" data-label="Rev YoY" data-sort="{{sortVal .RevYoY}}" title="{{.RevMonth}}{{if .RevYoYLowBase}} · low base{{end}}">{{pct .RevYoY}}</td>
+      <td class="num {{sign .RevYoYAvg}}{{if .LowBase}} lbval{{end}}" data-label="Rev 3M" data-sort="{{sortVal .RevYoYAvg}}"{{if .LowBase}} title="Low base: {{join .LowBaseNotes "; "}}"{{end}}>{{pct .RevYoYAvg}}</td>
+      <td class="num x" data-label="vs 52w high" data-sort="{{sortVal .FromHigh}}">{{pct .FromHigh}}</td>
+      <td class="num x {{sign .TrustNet10}}" data-label="投信 10d" data-sort="{{sortVal .TrustNet10}}">{{lots .TrustNet10}}</td>
+      <td class="num x {{sign .ForeignNet10}}" data-label="外資 10d" data-sort="{{sortVal .ForeignNet10}}">{{lots .ForeignNet10}}</td>
+      <td class="num x" data-label="Value 20d" data-sort="{{sortVal .Turnover20}}">{{yi .Turnover20}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  <p class="more" id="more" hidden><button type="button" id="showmore">Show 50 more</button> <button type="button" id="showall">Show all</button></p>
+  {{else}}
+  <p class="muted">No companies in the store yet. Run <code>radar collect</code> first.</p>
+  {{end}}
+</section>
+</main>
+
+<footer class="muted">Not financial advice. Colours follow Taiwan convention: <span class="up">red is up</span>, <span class="down">green is down</span>.</footer>
+<script src="static/app.js"></script>
+</body>
+</html>

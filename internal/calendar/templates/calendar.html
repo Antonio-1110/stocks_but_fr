@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="static/style.css">
 <style>
 /* Calendar-only rules; theme tokens come from static/style.css. */
-.nav { margin: 0 0 8px; font-size: .85rem; }
 .k-conference { --k: var(--cyan); }
 .k-exdiv { --k: var(--yellow); }
 .k-meeting { --k: var(--violet); }
@@ -43,7 +42,7 @@
 .grid .c[hidden] { display: none; }
 
 .agenda { margin: 0; padding: 0; list-style: none; }
-.day { padding: 8px 0 6px; border-bottom: 1px solid var(--panel-edge); scroll-margin-top: 12px; }
+.day { padding: 8px 0 6px; border-bottom: 1px solid var(--panel-edge); scroll-margin-top: calc(var(--navh) + 12px); }
 .day h3 { margin: 0 0 4px; font: 600 .85rem/1.2 var(--display); letter-spacing: .08em; color: var(--cyan); }
 .day.past h3 { color: var(--muted); }
 .day.today h3 { color: var(--yellow); }
@@ -77,16 +76,22 @@
 </head>
 <body>
 <div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html">Paper</a>
+  <a href="calendar.html" aria-current="page">Calendar</a>
+  <a href="health.html">Health</a>
+</nav>
 <header>
-  <p class="sys">SYS://TW-RADAR/CALENDAR <span class="blink">_</span></p>
   <h1 data-text="Calendar">Calendar</h1>
   <p class="stamp">Last updated <b>{{.GeneratedAt}}</b> <span class="sep">//</span> <b>{{.Total}} events</b></p>
-  <p class="nav"><a href="index.html">&lt; back to companies</a></p>
 </header>
 
 <main>
 <section class="panel">
-  <h2><span class="idx">01</span> Filter</h2>
+  <h2>Filter</h2>
   <div class="filters">
     <input id="q" type="search" placeholder="&gt; filter: ticker, name, keyword" aria-label="Filter">
   </div>
@@ -94,11 +99,14 @@
     {{range .Kinds}}<label class="k-{{.ID}}"><input type="checkbox" data-kind="{{.ID}}" checked> {{.Label}}</label>{{end}}
     <label class="etf-toggle"><input type="checkbox" id="etf"> 含 ETF</label>
   </div>
+  <details>
+  <summary class="muted hint">Where these dates come from</summary>
   <p class="muted hint">法說會 from MOPS 法人說明會一覽表; 除權息 from the TWSE and TPEx 預告表; 股東會 from the MOPS meeting summaries; 申報期限 are the statutory dates for general companies (a holiday moves them to the next business day). ETFs (codes starting 00) are hidden unless 含 ETF is ticked. Tap a day to jump to its list.</p>
+  </details>
 </section>
 
 <section class="panel">
-  <h2><span class="idx">02</span> Month view</h2>
+  <h2>Month view</h2>
   <div class="months">
   {{range .Months}}
     <div class="month">
@@ -116,7 +124,7 @@
 </section>
 
 <section class="panel">
-  <h2><span class="idx">03</span> Agenda <span class="count" id="count">{{.Total}}</span></h2>
+  <h2>Agenda <span class="count" id="count">{{.Total}}</span></h2>
   {{if .Days}}
   <ul class="agenda" id="agenda">
   {{range .Days}}

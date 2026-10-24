@@ -153,8 +153,8 @@ func TestRender(t *testing.T) {
 	must(t, err)
 
 	dir := t.TempDir()
-	must(t, render(st, dir, renderDay, testLowBase, testUnpriced))
-	b, err := os.ReadFile(filepath.Join(dir, "index.html"))
+	must(t, render(st, dir, renderDay, testLowBase, testUnpriced, nil))
+	b, err := os.ReadFile(filepath.Join(dir, "screener.html"))
 	must(t, err)
 	html := stdhtml.UnescapeString(string(b))
 	for _, want := range []string{
@@ -166,21 +166,42 @@ func TestRender(t *testing.T) {
 		"+1,000", // 投信 10d in 張
 		"200.0億", // 20d traded value
 		"prices as of 2026-08-30",
-		"revenue_momentum", // newest backtest row
-		"0.183",
+		`href="screener.html" aria-current="page"`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("index.html missing %q", want)
+			t.Errorf("screener.html missing %q", want)
 		}
 	}
-	for _, bad := range []string{"已下市", "停牌", ">old<"} {
+	for _, bad := range []string{"已下市", "停牌"} {
 		if strings.Contains(html, bad) {
-			t.Errorf("index.html should not contain %q", bad)
+			t.Errorf("screener.html should not contain %q", bad)
 		}
 	}
 	if strings.Index(html, "台積電") > strings.Index(html, "長榮") {
 		t.Error("2330 should be ranked above 2603")
 	}
+
+	b, err = os.ReadFile(filepath.Join(dir, "index.html"))
+	must(t, err)
+	overview := stdhtml.UnescapeString(string(b))
+	for _, want := range []string{
+		`href="index.html" aria-current="page"`,
+		"台積電", "+40.0%", // top of the growth ranking, 3M average
+		"revenue_momentum", // newest backtest row
+		"0.183",
+		"No paper portfolio has started yet.",
+		"No validated snapshot yet.",
+	} {
+		if !strings.Contains(overview, want) {
+			t.Errorf("index.html missing %q", want)
+		}
+	}
+	for _, bad := range []string{"已下市", ">old<", "Yahoo"} {
+		if strings.Contains(overview, bad) {
+			t.Errorf("index.html should not contain %q", bad)
+		}
+	}
+
 	for _, f := range []string{"static/style.css", "static/app.js"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Error(err)
@@ -190,11 +211,61 @@ func TestRender(t *testing.T) {
 
 func TestRenderEmptyStore(t *testing.T) {
 	dir := t.TempDir()
-	must(t, render(openStore(t), dir, renderDay, testLowBase, testUnpriced))
-	b, err := os.ReadFile(filepath.Join(dir, "index.html"))
+	must(t, render(openStore(t), dir, renderDay, testLowBase, testUnpriced, nil))
+	for _, name := range []string{"index.html", "screener.html"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		must(t, err)
+		if !strings.Contains(string(b), "No companies in the store yet") {
+			t.Errorf("%s: empty store should render the empty state", name)
+		}
+	}
+}
+
+func TestOverviewCards(t *testing.T) {
+	st := openStore(t)
+	_, err := st.DB.Exec(`
+		CREATE TABLE state.paper_portfolios (name TEXT, initial_capital REAL);
+		CREATE TABLE state.paper_equity (portfolio TEXT, date TEXT, liquidation REAL, bench REAL);
+		CREATE TABLE state.paper_positions (portfolio TEXT, ticker TEXT);
+		CREATE TABLE state.paper_orders (portfolio TEXT, status TEXT);
+		INSERT INTO state.paper_portfolios VALUES ('cycle_bottom', 1000), ('new_thing', 1000);
+		INSERT INTO state.paper_equity VALUES ('cycle_bottom', '2026-10-01', 1000, NULL),
+			('cycle_bottom', '2026-10-02', 1100, 1050), ('new_thing', '2026-10-02', 900, NULL);
+		INSERT INTO state.paper_positions VALUES ('cycle_bottom', '2330'), ('cycle_bottom', '2603');
+		INSERT INTO state.paper_orders VALUES ('cycle_bottom', 'pending'), ('cycle_bottom', 'filled');
+		CREATE TABLE corporate_events (market TEXT, ticker TEXT, date TEXT, kind TEXT, title TEXT, name TEXT);
+		INSERT INTO corporate_events VALUES ('TW', '2330', '2026-10-09', 'conference', '法說會', '台積電'),
+			('TW', '0050', '2026-10-10', 'exdiv', '除息', '元大台灣50'),
+			('TW', '2603', '2026-10-30', 'meeting', '股東會', '長榮');
+		CREATE TABLE snapshots (id INTEGER PRIMARY KEY, manifest TEXT);
+		INSERT INTO snapshots (manifest) VALUES
+			('{"id":"2026-10-09T01:00:00Z","latest":{"prices":"2026-10-08"},"hard_checks":[{"ok":true}],"soft_checks":[{"ok":false},{"ok":true}]}');`)
 	must(t, err)
-	if !strings.Contains(string(b), "No companies in the store yet") {
-		t.Error("empty store should render the empty state")
+
+	cards, err := loadPaper(st.DB, []string{"cycle_bottom", "missing", "new_thing"})
+	must(t, err)
+	if len(cards) != 2 {
+		t.Fatalf("paper cards = %+v, want 2", cards)
+	}
+	c := cards[0]
+	if c.Title != "Cycle bottom" || c.Date != "2026-10-02" || c.Holdings != 2 || c.PendingOrders != 1 ||
+		!c.HasBench || c.Return < 0.0999 || c.Return > 0.1001 || c.BenchReturn < 0.0499 || c.BenchReturn > 0.0501 {
+		t.Errorf("cycle_bottom card = %+v", c)
+	}
+	if cards[1].Title != "New thing" || cards[1].HasBench {
+		t.Errorf("new_thing card = %+v", cards[1])
+	}
+
+	evs, total, err := loadUpcoming(st.DB, model.MarketTW, renderDay)
+	must(t, err)
+	if total != 1 || len(evs) != 1 || evs[0].Ticker != "2330" || evs[0].Kind != "法說會" || evs[0].Date != "10-09" {
+		t.Errorf("upcoming = %+v (total %d), want only 2330 (ETF and later events left out)", evs, total)
+	}
+
+	h, err := loadHealth(st.DB)
+	must(t, err)
+	if h == nil || h.HardFailed != 0 || h.SoftFailed != 1 || h.Prices != "2026-10-08" || h.Stamp != "2026-10-09 09:00" {
+		t.Errorf("health = %+v", h)
 	}
 }
 

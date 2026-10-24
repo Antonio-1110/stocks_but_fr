@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="static/style.css">
 <style>
 /* Paper-portfolio-only rules; theme tokens come from static/style.css. */
-.nav { margin: 0 0 8px; font-size: .85rem; }
 .rules { margin: 0 0 10px; font-size: .85rem; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0 0 12px; }
 .tile { border: 1px solid var(--panel-edge); padding: 8px 10px; }
@@ -47,6 +46,13 @@
 .book tr.pending td { background: rgba(249, 240, 2, 0.05); }
 .book .st { font-size: .75rem; color: var(--muted); }
 .book thead th { cursor: default; }
+.book details { margin-top: 12px; }
+.book details > summary h3 { margin: 0; }
+.costline { font-size: .78rem; margin: -4px 0 12px; }
+.board td a { font-family: var(--cjk), var(--mono); }
+.board thead th { cursor: default; position: static; }
+.board tr[aria-selected="true"] td { background: rgba(0, 240, 255, 0.08); }
+.board tr[aria-selected="true"] td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
 @media (max-width: 720px) {
   .chart text { font-size: 19px; }
   .book thead { display: none; }
@@ -57,36 +63,66 @@
     text-transform: uppercase; letter-spacing: .04em; text-shadow: none;
   }
   .book td.co::before, .book td.why::before { content: none !important; }
+  .board table { display: table; }
+  .board thead { display: table-header-group; position: static; padding: 0; background: none; }
+  .board tbody { display: table-row-group; }
+  .board thead tr, .board tbody tr { display: table-row; padding: 0; border: 0; }
+  .board th, .board td, .board td.num { display: table-cell; padding: 4px; border-bottom: 1px solid var(--line); }
+  .board td.num { text-align: right; }
+  .board thead th { border: 0; border-bottom: 1px solid var(--cyan); font-size: .6rem; }
+  .board .w { display: none; }
 }
 </style>
 </head>
 <body>
 <div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html" aria-current="page">Paper</a>
+  <a href="calendar.html">Calendar</a>
+  <a href="health.html">Health</a>
+</nav>
 <header>
-  <p class="sys">SYS://TW-RADAR/PAPER <span class="blink">_</span></p>
   <h1 data-text="{{.Title}}">{{.Title}}</h1>
   <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{if .PriceDate}} <span class="sep">//</span> <b>prices as of {{.PriceDate}}</b>{{end}}</p>
-  <p class="nav"><a href="index.html">&lt; back to companies</a></p>
 </header>
 
 <main>
-<section class="panel">
-  <h2><span class="idx">00</span> How this works</h2>
-  <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held.</p>
+{{if .Portfolios}}
+<section class="panel board">
+  <h2>Scoreboard</h2>
+  <table>
+    <thead><tr><th>Strategy</th><th class="num w">Value</th><th class="num">Return</th><th class="num">{{.Benchmark}}</th><th class="num">Ahead</th><th class="num w">Stocks</th></tr></thead>
+    <tbody>
+    {{range .Portfolios}}<tr data-book="{{.Name}}">
+      <td><a href="#{{.Name}}">{{.Title}}</a></td>
+      <td class="num w">{{ntd .Value}}</td>
+      <td class="num {{sign .Return}}">{{pct .Return}}</td>
+      <td class="num {{if .HasBench}}{{sign .BenchReturn}}{{end}}">{{if .HasBench}}{{pct .BenchReturn}}{{else}}–{{end}}</td>
+      <td class="num {{if .HasBench}}{{sign (diff .Value .Bench)}}{{end}}">{{if .HasBench}}{{money (diff .Value .Bench)}}{{else}}–{{end}}</td>
+      <td class="num w">{{len .Holdings}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  <details>
+    <summary><h3>How this works</h3></summary>
+    <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held.</p>
+  </details>
 </section>
+{{end}}
 
 {{range $i, $p := .Portfolios}}
 <section class="panel book" id="{{.Name}}">
-  <h2><span class="idx">0{{inc $i}}</span> {{.Title}}</h2>
+  <h2>{{.Title}}</h2>
   <p class="muted rules">{{.Rules}} Started on the {{.StartedOn}} close with NT${{ntd .Capital}}.</p>
   <dl class="tiles">
     <div class="tile"><dt>Value after costs</dt><dd>NT${{ntd .Value}}<small class="{{sign .Return}}">{{pct .Return}}</small></dd></div>
     <div class="tile"><dt>{{$.Benchmark}} same money</dt><dd>{{if .HasBench}}NT${{ntd .Bench}}<small class="{{sign .BenchReturn}}">{{pct .BenchReturn}}</small>{{else}}<span class="muted">buys at next open</span>{{end}}</dd></div>
     <div class="tile"><dt>Ahead of {{$.Benchmark}}</dt><dd>{{if .HasBench}}<span class="{{sign (diff .Value .Bench)}}">{{money (diff .Value .Bench)}}</span>{{else}}<span class="muted">–</span>{{end}}</dd></div>
-    <div class="tile"><dt>Cash</dt><dd>NT${{ntd .Cash}}</dd></div>
-    <div class="tile"><dt>Commission paid</dt><dd>NT${{ntd .Fees}}</dd></div>
-    <div class="tile"><dt>Sell tax paid</dt><dd>NT${{ntd .Tax}}</dd></div>
   </dl>
+  <p class="muted costline">Cash NT${{ntd .Cash}} <span class="sep">//</span> commission paid NT${{ntd .Fees}} <span class="sep">//</span> sell tax paid NT${{ntd .Tax}}</p>
 
   {{with .Chart}}{{if .Points}}
   <div class="legend"><span class="k-p"><i></i>Portfolio</span><span class="k-b"><i></i>{{$.Benchmark}}</span></div>
@@ -109,7 +145,8 @@
   </div>
   {{end}}{{end}}
 
-  <h3>Holdings <span class="count">{{len .Holdings}}</span></h3>
+  <details open>
+  <summary><h3>Holdings <span class="count">{{len .Holdings}}</span></h3></summary>
   {{if .Holdings}}
   <table>
     <thead><tr><th>Stock</th><th>Since</th><th>Cost</th><th>Value</th><th>Return after costs</th><th>Weight</th></tr></thead>
@@ -125,8 +162,10 @@
     </tbody>
   </table>
   {{else}}<p class="muted">All cash.</p>{{end}}
+  </details>
 
-  <h3>Orders <span class="count">{{len .Orders}}</span></h3>
+  <details>
+  <summary><h3>Orders <span class="count">{{len .Orders}}</span></h3></summary>
   {{if .Orders}}
   <table>
     <thead><tr><th>Stock</th><th>Side</th><th>Signal</th><th>Filled</th><th>Price</th><th>NTD</th><th>Fee+tax</th><th>P/L</th><th>Why</th></tr></thead>
@@ -145,6 +184,7 @@
     </tbody>
   </table>
   {{else}}<p class="muted">No orders yet.</p>{{end}}
+  </details>
 </section>
 {{else}}
 <section class="panel">
@@ -153,6 +193,31 @@
 {{end}}
 </main>
 <script>
+// One portfolio at a time: the scoreboard picks which (also from the URL hash).
+(function () {
+  var rows = document.querySelectorAll('.board tr[data-book]');
+  var books = document.querySelectorAll('section.book');
+  if (rows.length < 2) return;
+  function pick(name, scroll) {
+    var found = false;
+    books.forEach(function (b) { if (b.id === name) found = true; });
+    if (!found) name = books[0].id;
+    books.forEach(function (b) { b.hidden = b.id !== name; });
+    rows.forEach(function (r) { r.setAttribute('aria-selected', r.dataset.book === name ? 'true' : 'false'); });
+    if (scroll) document.getElementById(name).scrollIntoView({ block: 'start' });
+  }
+  rows.forEach(function (r) {
+    r.style.cursor = 'pointer';
+    r.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      history.replaceState(null, '', '#' + r.dataset.book);
+      pick(r.dataset.book, false);
+    });
+  });
+  window.addEventListener('hashchange', function () { pick(location.hash.slice(1), true); });
+  pick(location.hash.slice(1), false);
+})();
+
 // Hover readout on each equity chart: nearest day, both returns.
 document.querySelectorAll('.chart svg').forEach(function (svg) {
   var pts = JSON.parse(svg.dataset.pts || '[]');
