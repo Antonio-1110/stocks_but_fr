@@ -89,6 +89,13 @@ private and point-in-time for listings and revenue, and both strategies have pin
    2012–2019 and lost 58% in 2015; the capped version made 4.4%. Details in
    [docs/dca-results.md](docs/dca-results.md).
 
+**Alpha lab (done 2026-10-25, #76)**: tests 30 short-term signals weekly in the
+daily run; the dashboard's Alpha page shows the leaderboard and today's names for
+signals that work. First run: only "near the 52-week high" (10–20 day hold)
+holds in both periods; revenue news works since 2020 only; 投信 signals faded.
+Details in [docs/alpha-lab.md](docs/alpha-lab.md). Next candidates: a paper
+portfolio on the 52-week-high signal, and collecting margin/short data (融資融券).
+
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names
 have no official listing date.

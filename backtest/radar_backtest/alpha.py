@@ -336,7 +336,7 @@ def markdown(results: pd.DataFrame, run_at: str, source: str) -> str:
              f"Round-trip cost {pct(results['cost'].iloc[0])}; passing hurdle t ≥ {results['hurdle'].iloc[0]:.2f} "
              "in 2012–2019, confirmed with t ≥ 2 from 2020. Edge = top-decile (or event) excess return per "
              "trade vs the average liquid stock; net = after costs; late = net acted on a day later (2020 on).", "",
-             "| Verdict | Signal | Days | Design edge (t) | Design net | Test edge (t) | Test net | Late net | "
+             "| Verdict | Signal | Hold (days) | Design edge (t) | Design net | Test edge (t) | Test net | Late net | "
              "Last 12m net | Test IC | Test hit | Test trades |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for _, x in r.iterrows():
