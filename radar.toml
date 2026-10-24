@@ -185,3 +185,53 @@ foreign_weight = 0.33
 
 [strategy.foreign_flow.rm_plain] # no foreign rule: must match revenue_momentum (sanity check)
 variant = "revenue"
+
+# Active strategies (issues #70-#73): a few stocks held for days or weeks, run on
+# backtest/strategies/swing.py's order engine. Each buy gets 1/max_positions of equity.
+
+[strategy.record_revenue]      # issue #70: buy record monthly revenue after the deadline, hold ~a month
+max_positions = 8
+record_months = 36             # newest month above each of the 35 before it
+min_yoy_pct = 20.0             # and at least this YoY (%)
+min_base_ntd = 10_000_000      # last year's same month at least this (no tiny bases)
+min_adv_ntd = 20_000_000       # NTD average traded value...
+adv_days = 20                  # ...over this many trading days
+hold_days = 20                 # sell after this many trading days, unless it posts another record
+trail_stop = 0.10              # or once 10% below its highest close since buying
+revenue_deadline_day = 10
+
+[strategy.breakout]            # issue #71: new 55-day high on heavy volume, ride it with a trailing stop
+max_positions = 8
+breakout_days = 55             # close above the highest close of the previous 55 trading days...
+volume_days = 50               # ...with traded value at least volume_mult x its 50-day average
+volume_mult = 2.0
+min_adv_ntd = 30_000_000
+adv_days = 20
+regime_ticker = "0050"         # no new buys while 0050 closes below its 200-day average
+regime_days = 200
+atr_days = 20                  # trailing stop: highest close since buying minus
+atr_mult = 3.0                 # atr_mult x the average daily move over atr_days
+
+[strategy.window_dressing]     # issue #72: ride 投信 quarter-end buying, out before the quarter closes
+quarters = [3, 6, 9, 12]       # quarter-end months traded
+entry_days = 28                # buy once the quarter end is this many calendar days away or less...
+exit_days = 3                  # ...sell everything once it is this close
+flow_days = 20                 # rank by 投信 net NTD bought / NTD traded over this many trading days
+max_positions = 10
+min_adv_ntd = 20_000_000
+adv_days = 20
+skip_largest = 100             # leave out the 100 most traded stocks: small and mid caps only
+stop_loss = 0.10
+
+[strategy.pullback]            # issue #73: buy sharp dips in strong uptrends, sell on the bounce
+max_positions = 10
+min_adv_ntd = 30_000_000
+adv_days = 20
+trend_days = 200               # close above its 200-day average...
+strength_days = 120            # ...and in the top strength_pct of liquid stocks by 120-day return
+strength_pct = 0.2
+rsi_days = 2
+entry_rsi = 10.0               # buy when RSI(2) is below this, most oversold first
+exit_ma_days = 5               # sell when the close is back above its 5-day average...
+max_hold_days = 10             # ...or after 10 trading days
+stop_loss = 0.10
