@@ -20,7 +20,7 @@
     <thead><tr><th>Strategy</th><th class="num">Return</th><th class="num">0050</th><th class="num">Ahead</th><th class="num">Stocks</th></tr></thead>
     <tbody>
     {{range .Paper}}<tr>
-      <td><a href="paper.html#{{.Name}}">{{.Title}}</a></td>
+      <td><a href="paper-{{.Name}}.html">{{.Title}}</a></td>
       <td class="num {{retSign .Return}}">{{ret .Return}}</td>
       <td class="num {{if .HasBench}}{{retSign .BenchReturn}}{{end}}">{{if .HasBench}}{{ret .BenchReturn}}{{else}}–{{end}}</td>
       <td class="num {{if .HasBench}}{{retSign (sub .Return .BenchReturn)}}{{end}}">{{if .HasBench}}{{ret (sub .Return .BenchReturn)}}{{else}}–{{end}}</td>

@@ -51,8 +51,14 @@
 .costline { font-size: .78rem; margin: -4px 0 12px; }
 .board td a { font-family: var(--cjk), var(--mono); }
 .board thead th { cursor: default; position: static; }
-.board tr[aria-selected="true"] td { background: rgba(0, 240, 255, 0.08); }
-.board tr[aria-selected="true"] td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
+.picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; }
+.picker a {
+  padding: 7px 10px; border: 1px solid var(--panel-edge); color: var(--fg); background: rgba(0, 0, 0, 0.45);
+  font-family: var(--cjk), var(--mono); font-size: .82rem;
+}
+.picker a span { font-family: var(--mono); font-size: .75rem; margin-left: 4px; }
+.picker a:first-child { color: var(--cyan); }
+.picker a[aria-current="page"] { border-color: var(--cyan); background: rgba(0, 240, 255, 0.12); box-shadow: 0 0 10px rgba(0, 240, 255, 0.35); }
 @media (max-width: 720px) {
   .chart text { font-size: 19px; }
   .book thead { display: none; }
@@ -71,6 +77,8 @@
   .board td.num { text-align: right; }
   .board thead th { border: 0; border-bottom: 1px solid var(--cyan); font-size: .6rem; }
   .board .w { display: none; }
+  .picker { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .picker a { white-space: nowrap; flex: none; }
 }
 </style>
 </head>
@@ -90,14 +98,19 @@
 </header>
 
 <main>
-{{if .Portfolios}}
+{{if .Current}}
+<nav class="panel picker" aria-label="Strategies">
+  <a href="paper.html">&lt; Scoreboard</a>
+  {{range .Portfolios}}<a href="{{page .Name}}"{{if eq .Name $.Current.Name}} aria-current="page"{{end}}>{{.Title}} <span class="{{sign .Return}}">{{pct .Return}}</span></a>{{end}}
+</nav>
+{{else if .Portfolios}}
 <section class="panel board">
   <h2>Scoreboard</h2>
   <table>
     <thead><tr><th>Strategy</th><th class="num w">Value</th><th class="num">Return</th><th class="num">{{.Benchmark}}</th><th class="num">Ahead</th><th class="num w">Stocks</th></tr></thead>
     <tbody>
-    {{range .Portfolios}}<tr data-book="{{.Name}}">
-      <td><a href="#{{.Name}}">{{.Title}}</a></td>
+    {{range .Portfolios}}<tr data-href="{{page .Name}}">
+      <td><a href="{{page .Name}}">{{.Title}}</a></td>
       <td class="num w">{{ntd .Value}}</td>
       <td class="num {{sign .Return}}">{{pct .Return}}</td>
       <td class="num {{if .HasBench}}{{sign .BenchReturn}}{{end}}">{{if .HasBench}}{{pct .BenchReturn}}{{else}}–{{end}}</td>
@@ -106,6 +119,7 @@
     </tr>{{end}}
     </tbody>
   </table>
+  <p class="muted note">Tap a strategy to open its own page: its chart, holdings and orders.</p>
   <details>
     <summary><h3>How this works</h3></summary>
     <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held.</p>
@@ -113,9 +127,8 @@
 </section>
 {{end}}
 
-{{range $i, $p := .Portfolios}}
+{{with .Current}}
 <section class="panel book" id="{{.Name}}">
-  <h2>{{.Title}}</h2>
   <p class="muted rules">{{.Rules}} Started on the {{.StartedOn}} close with NT${{ntd .Capital}}.</p>
   <dl class="tiles">
     <div class="tile"><dt>Value after costs</dt><dd>NT${{ntd .Value}}<small class="{{sign .Return}}">{{pct .Return}}</small></dd></div>
@@ -186,37 +199,18 @@
   {{else}}<p class="muted">No orders yet.</p>{{end}}
   </details>
 </section>
-{{else}}
+{{else}}{{if not .Portfolios}}
 <section class="panel">
   <p class="muted">No paper portfolio has started yet. They start on the first <code>radar collect</code> run with prices.</p>
 </section>
-{{end}}
+{{end}}{{end}}
 </main>
 <script>
-// One portfolio at a time: the scoreboard picks which (also from the URL hash).
-(function () {
-  var rows = document.querySelectorAll('.board tr[data-book]');
-  var books = document.querySelectorAll('section.book');
-  if (rows.length < 2) return;
-  function pick(name, scroll) {
-    var found = false;
-    books.forEach(function (b) { if (b.id === name) found = true; });
-    if (!found) name = books[0].id;
-    books.forEach(function (b) { b.hidden = b.id !== name; });
-    rows.forEach(function (r) { r.setAttribute('aria-selected', r.dataset.book === name ? 'true' : 'false'); });
-    if (scroll) document.getElementById(name).scrollIntoView({ block: 'start' });
-  }
-  rows.forEach(function (r) {
-    r.style.cursor = 'pointer';
-    r.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      history.replaceState(null, '', '#' + r.dataset.book);
-      pick(r.dataset.book, false);
-    });
-  });
-  window.addEventListener('hashchange', function () { pick(location.hash.slice(1), true); });
-  pick(location.hash.slice(1), false);
-})();
+// The whole scoreboard row opens the strategy's page.
+document.querySelectorAll('.board tr[data-href]').forEach(function (r) {
+  r.style.cursor = 'pointer';
+  r.addEventListener('click', function () { location.href = r.dataset.href; });
+});
 
 // Hover readout on each equity chart: nearest day, both returns.
 document.querySelectorAll('.chart svg').forEach(function (svg) {

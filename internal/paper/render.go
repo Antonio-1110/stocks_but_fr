@@ -31,7 +31,13 @@ type Page struct {
 	Portfolios  []View
 	Costs       config.TWCosts
 	Benchmark   string
+	// Current is set on a strategy's own page (paper-<name>.html); nil on
+	// paper.html, the scoreboard.
+	Current *View
 }
+
+// PageFile is the file a portfolio's own page is written to.
+func PageFile(name string) string { return "paper-" + name + ".html" }
 
 // View is one portfolio as the page shows it.
 type View struct {
@@ -148,8 +154,24 @@ func render(db *sql.DB, cfg config.Config, dir string, now time.Time) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	// Write to a temp file and rename, so a failed render never leaves a half page.
-	tmp := filepath.Join(dir, ".paper.html.tmp")
+	if err := write(tmpl, dir, "paper.html", page); err != nil {
+		return err
+	}
+	for i := range page.Portfolios {
+		p := page
+		p.Current = &page.Portfolios[i]
+		p.Title = p.Current.Title
+		if err := write(tmpl, dir, PageFile(p.Current.Name), p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// write writes to a temp file and renames, so a failed render never leaves a
+// half page.
+func write(tmpl *template.Template, dir, name string, page Page) error {
+	tmp := filepath.Join(dir, "."+name+".tmp")
 	f, err := os.Create(tmp)
 	if err != nil {
 		return err
@@ -162,7 +184,7 @@ func render(db *sql.DB, cfg config.Config, dir string, now time.Time) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(dir, "paper.html"))
+	return os.Rename(tmp, filepath.Join(dir, name))
 }
 
 func view(db *sql.DB, m *market, b *book, costs config.TWCosts) (View, error) {
@@ -361,6 +383,7 @@ var funcs = template.FuncMap{
 	"sub":    func(a, b float64) float64 { return a - b },
 	"diff":   func(a, b float64) float64 { return a - b },
 	"inc":    func(i int) int { return i + 1 },
+	"page":   PageFile,
 }
 
 func groupThousands(v float64) string {
