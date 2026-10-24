@@ -48,6 +48,7 @@
 .book thead th { cursor: default; }
 .book details { margin-top: 12px; }
 .book details > summary h3 { margin: 0; }
+.behind { margin-left: 6px; padding: 0 5px; border: 1px solid var(--yellow); color: var(--yellow); font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 .costline { font-size: .78rem; margin: -4px 0 12px; }
 .board td a { font-family: var(--cjk), var(--mono); }
 .board thead th { cursor: default; position: static; }
@@ -107,14 +108,15 @@
 <section class="panel board">
   <h2>Scoreboard</h2>
   <table>
-    <thead><tr><th>Strategy</th><th class="num w">Value</th><th class="num">Return</th><th class="num">{{.Benchmark}}</th><th class="num">Ahead</th><th class="num w">Stocks</th></tr></thead>
+    <thead><tr><th>Strategy</th><th class="num w">Value</th><th class="num">Return</th><th class="num">{{.Benchmark}}</th><th class="num">Ahead</th><th class="num">30 days vs {{.Benchmark}}</th><th class="num w">Stocks</th></tr></thead>
     <tbody>
     {{range .Portfolios}}<tr data-href="{{page .Name}}">
-      <td><a href="{{page .Name}}">{{.Title}}</a></td>
+      <td><a href="{{page .Name}}">{{.Title}}</a>{{if .Last30.Behind}}<span class="behind" title="Behind {{$.Benchmark}} over the last 30 days">behind</span>{{end}}</td>
       <td class="num w">{{ntd .Value}}</td>
       <td class="num {{sign .Return}}">{{pct .Return}}</td>
       <td class="num {{if .HasBench}}{{sign .BenchReturn}}{{end}}">{{if .HasBench}}{{pct .BenchReturn}}{{else}}–{{end}}</td>
       <td class="num {{if .HasBench}}{{sign (diff .Value .Bench)}}{{end}}">{{if .HasBench}}{{money (diff .Value .Bench)}}{{else}}–{{end}}</td>
+      <td class="num {{if .Last30.OK}}{{sign .Last30.Gap}}{{end}}">{{template "gap" .Last30}}</td>
       <td class="num w">{{len .Holdings}}</td>
     </tr>{{end}}
     </tbody>
@@ -122,7 +124,7 @@
   <p class="muted note">Tap a strategy to open its own page: its chart, holdings and orders.</p>
   <details>
     <summary><h3>How this works</h3></summary>
-    <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held.</p>
+    <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held. "30 days vs {{.Benchmark}}" is the portfolio's return over the last 30 days minus {{.Benchmark}}'s, in percentage points; a portfolio younger than that is measured from its start (marked *). Each month, any strategy behind {{.Benchmark}} gets reviewed: improved, or proposed for retirement.</p>
   </details>
 </section>
 {{end}}
@@ -133,6 +135,7 @@
   <dl class="tiles">
     <div class="tile"><dt>Value after costs</dt><dd>NT${{ntd .Value}}<small class="{{sign .Return}}">{{pct .Return}}</small></dd></div>
     <div class="tile"><dt>{{$.Benchmark}} same money</dt><dd>{{if .HasBench}}NT${{ntd .Bench}}<small class="{{sign .BenchReturn}}">{{pct .BenchReturn}}</small>{{else}}<span class="muted">buys at next open</span>{{end}}</dd></div>
+    <div class="tile"><dt>Last 30 days{{if .Last30.Behind}}<span class="behind">behind</span>{{end}}</dt><dd>{{if .Last30.OK}}<span class="{{sign .Last30.Return}}">{{pct .Last30.Return}}</span><small>{{$.Benchmark}} {{pct .Last30.BenchReturn}}{{if .Last30.Partial}}, since {{.Last30.From}}{{end}}</small>{{else}}<span class="muted">–</span>{{end}}</dd></div>
     <div class="tile"><dt>Ahead of {{$.Benchmark}}</dt><dd>{{if .HasBench}}<span class="{{sign (diff .Value .Bench)}}">{{money (diff .Value .Bench)}}</span>{{else}}<span class="muted">–</span>{{end}}</dd></div>
   </dl>
   <p class="muted costline">Cash NT${{ntd .Cash}} <span class="sep">//</span> commission paid NT${{ntd .Fees}} <span class="sep">//</span> sell tax paid NT${{ntd .Tax}}</p>
@@ -237,3 +240,4 @@ document.querySelectorAll('.chart svg').forEach(function (svg) {
 </script>
 </body>
 </html>
+{{define "gap"}}{{if .OK}}{{printf "%+.1f" (pts100 .Gap)}} pts{{if .Partial}}*{{end}}{{else}}–{{end}}{{end}}

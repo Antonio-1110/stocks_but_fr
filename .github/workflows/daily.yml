@@ -48,6 +48,7 @@ jobs:
     permissions:
       contents: read    # the release lives on DATA_REPO, written with DATA_TOKEN
       actions: write    # start the next run while a backfill is incomplete
+      issues: write     # the monthly paper review (#75)
     env:
       # gh release commands go to the private data repo (#62).
       GH_TOKEN: ${{ secrets.DATA_TOKEN }}
@@ -331,6 +332,29 @@ jobs:
 
       - name: Render
         run: ./radar render
+
+      # Once a month, the first run of the new month (Taipei) opens an issue
+      # comparing each paper portfolio with 0050 over the month just ended
+      # (#75), assigned to the owner. A failure here never stops the publish.
+      - name: Monthly paper review
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ./radar review > review.md
+          title=$(head -1 review.md | sed 's/^# //')
+          if [[ ! $title =~ ^Paper\ review\ [0-9]{4}-[0-9]{2}$ ]]; then
+            echo "::warning::radar review printed no report"
+            exit 0
+          fi
+          if gh issue list --label review --state all --limit 200 --json title -q '.[].title' | grep -qxF "$title"; then
+            echo "$title is already open"
+            exit 0
+          fi
+          gh label create review --color FBCA04 --description "Monthly paper review (#75)" 2>/dev/null || true
+          tail -n +3 review.md > body.md
+          gh issue create --title "$title" --label review --assignee "$GITHUB_REPOSITORY_OWNER" --body-file body.md
 
       - uses: actions/upload-pages-artifact@v3
         with:

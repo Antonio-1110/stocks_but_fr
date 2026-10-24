@@ -62,6 +62,11 @@ fills at the next open with the `[costs.tw]` commission and sell tax, and is
 compared with the same money held in 0050. State is in the `paper_*` tables,
 so picks once made never change. No real orders are placed.
 
+Each portfolio shows its last 30 days against 0050, flagged "behind" when it
+trails. Once a month the daily run opens a "Paper review YYYY-MM" issue
+(label `review`) from `radar review`: every portfolio against 0050 over the
+month just ended. Strategies behind get improved or proposed for retirement.
+
 ## Environment variables
 
 Every new one gets listed here.

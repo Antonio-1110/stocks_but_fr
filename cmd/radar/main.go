@@ -50,7 +50,7 @@ var renderers = []step{
 func main() {
 	configPath := flag.String("config", "radar.toml", "path to the config file")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render|notify")
+		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render|notify|review")
 	}
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -71,6 +71,9 @@ func main() {
 	case "notify":
 		// Sends the alerts collect queued; run it after the state is saved.
 		steps = []step{{"notify", alerts.Notify}}
+	case "review":
+		// Prints the monthly paper review (issue #75) as markdown on stdout.
+		steps = []step{{"review", paper.Review}}
 	default:
 		flag.Usage()
 		os.Exit(2)

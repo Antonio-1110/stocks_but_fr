@@ -54,6 +54,7 @@ type View struct {
 	Holdings           []Holding
 	Orders             []OrderRow
 	Chart              Chart
+	Last30             Compare // against the benchmark over the last 30 days (issue #75)
 }
 
 type Holding struct {
@@ -241,6 +242,9 @@ func view(db *sql.DB, m *market, b *book, costs config.TWCosts) (View, error) {
 		v.Orders = append(v.Orders, r)
 	}
 
+	if v.Last30, err = last30(db, b.Name); err != nil {
+		return View{}, err
+	}
 	v.Chart, err = chart(db, b)
 	return v, err
 }
@@ -383,6 +387,7 @@ var funcs = template.FuncMap{
 	"sub":    func(a, b float64) float64 { return a - b },
 	"diff":   func(a, b float64) float64 { return a - b },
 	"inc":    func(i int) int { return i + 1 },
+	"pts100": func(v float64) float64 { return v * 100 },
 	"page":   PageFile,
 }
 
