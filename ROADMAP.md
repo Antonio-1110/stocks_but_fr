@@ -96,6 +96,12 @@ holds in both periods; revenue news works since 2020 only; 投信 signals faded.
 Details in [docs/alpha-lab.md](docs/alpha-lab.md). Next candidates: a paper
 portfolio on the 52-week-high signal, and collecting margin/short data (融資融券).
 
+**US large caps (started 2026-10-31, #2)**: the owner asked to start on US
+stocks with the biggest companies. About 50 large caps plus SPY and QQQ get
+daily prices (Yahoo chart data, history from 2015) into their own tables and a
+US dashboard page. US backtests, paper portfolios, costs and a full SEC
+universe are not started.
+
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names
 have no official listing date.

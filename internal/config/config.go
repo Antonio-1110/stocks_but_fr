@@ -18,6 +18,7 @@ type Config struct {
 	Strategy Strategy `toml:"strategy"`
 	Alerts   Alerts   `toml:"alerts"`
 	Paper    Paper    `toml:"paper"`
+	US       US       `toml:"us"`
 }
 
 type Run struct {
@@ -342,6 +343,17 @@ func Default() Config {
 			Benchmark:      "0050",
 			MinCoverage:    0.9,
 		},
+		US: US{
+			Tickers: []string{
+				"NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "BRK-B", "JPM",
+				"WMT", "LLY", "ORCL", "V", "MA", "NFLX", "XOM", "COST", "JNJ", "PLTR",
+				"HD", "ABBV", "BAC", "AMD", "PG", "UNH", "GE", "KO", "CVX", "CSCO",
+				"IBM", "WFC", "MS", "GS", "MU", "CAT", "PM", "AXP", "CRM", "MRK",
+				"TMUS", "RTX", "LRCX", "AMAT", "INTC", "PEP", "MCD", "LIN", "DIS", "UBER",
+			},
+			Benchmarks:   []string{"SPY", "QQQ"},
+			HistoryStart: "2015-01-01",
+		},
 	}
 }
 
@@ -374,4 +386,11 @@ func (c Config) validate() error {
 // Commission is the broker fee for one order of the given NTD value.
 func (t TWCosts) Commission(value float64) float64 {
 	return math.Max(math.Floor(value*t.CommissionRate*t.BrokerDiscount), t.MinCommission)
+}
+
+// US is [us]: the US stocks tracked (issue #2). Prices only for now.
+type US struct {
+	Tickers      []string `toml:"tickers"`       // Yahoo symbols, e.g. "BRK-B"
+	Benchmarks   []string `toml:"benchmarks"`    // index ETFs shown above the list
+	HistoryStart string   `toml:"history_start"` // YYYY-MM-DD, first full fetch starts here
 }

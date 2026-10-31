@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US large caps</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* US-page-only rules; theme tokens come from static/style.css. */
+.co .tk { color: var(--cyan); }
+.co small { display: block; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.stale { color: var(--yellow); font-size: .7rem; }
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html">Paper</a>
+  <a href="alpha.html">Alpha</a>
+  <a href="us.html" aria-current="page">US</a>
+  <a href="calendar.html">Calendar</a>
+  <a href="health.html">Health</a>
+</nav>
+<header>
+  <h1 data-text="US large caps">US large caps</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{if .DataEnd}} <span class="sep">//</span> <b>prices to {{.DataEnd}}</b> (New York){{end}}</p>
+</header>
+
+<main>
+{{if not (or .Rows .Benchmarks)}}
+<section class="panel">
+  <h2>No prices yet</h2>
+  <p class="muted">The daily run fetches the tickers in <code>[us]</code> of radar.toml after each US close; they appear here after the first run.</p>
+</section>
+{{else}}
+{{if .Benchmarks}}
+<section class="panel">
+  <h2>Market</h2>
+  <table class="sortable">{{template "head"}}
+    <tbody>{{range .Benchmarks}}{{template "row" .}}{{end}}</tbody>
+  </table>
+</section>
+{{end}}
+<section class="panel">
+  <h2>Largest US companies</h2>
+  <p class="muted hint">About the 50 largest US companies by market cap, in that rough order (#). Changes include dividends. Tap a column header to sort; tap a ticker for its Yahoo Finance page.</p>
+  <table class="sortable">{{template "head"}}
+    <tbody>{{range .Rows}}{{template "row" .}}{{end}}</tbody>
+  </table>
+  {{if .Missing}}<p class="muted note">No prices yet for: {{range $i, $t := .Missing}}{{if $i}}, {{end}}{{$t}}{{end}}.</p>{{end}}
+</section>
+{{end}}
+<footer class="muted">Daily bars from Yahoo Finance's chart data, fetched once after each US close. Prices only for now: no US backtests or paper portfolios yet.</footer>
+</main>
+<script>
+// Click a header to sort its table; numbers start high-to-low, text A-Z. No dependencies.
+document.querySelectorAll("table.sortable").forEach(function (table) {
+  var tbody = table.tBodies[0], headers = table.tHead.rows[0].cells;
+  Array.prototype.forEach.call(headers, function (th, col) {
+    var type = th.getAttribute("data-type");
+    if (!type) return;
+    th.addEventListener("click", function () {
+      var asc = th.getAttribute("aria-sort") ? th.getAttribute("aria-sort") === "descending" : (type === "text" || col === 0);
+      Array.prototype.forEach.call(headers, function (c) { c.removeAttribute("aria-sort"); });
+      th.setAttribute("aria-sort", asc ? "ascending" : "descending");
+      var rows = Array.prototype.slice.call(tbody.rows);
+      rows.sort(function (a, b) {
+        var x = a.cells[col].getAttribute("data-sort"), y = b.cells[col].getAttribute("data-sort");
+        if (type === "num") {
+          if (x === "" || y === "") return (x === "") - (y === "");
+          return asc ? x - y : y - x;
+        }
+        return asc ? x.localeCompare(y) : y.localeCompare(x);
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+    });
+  });
+});
+</script>
+</body>
+</html>
+{{define "row"}}
+    <tr>
+      <td class="num rank" data-sort="{{.Order}}">{{.Order}}</td>
+      <td class="co" data-sort="{{.Ticker}}"><a href="{{.Link}}" rel="noopener"><b class="tk">{{.Ticker}}</b></a>{{if .Stale}} <span class="stale" title="Newest bar {{.Date}}">STALE</span>{{end}}<small>{{.Name}}</small></td>
+      <td class="num" data-label="Price" data-sort="{{sortVal .Close}}">{{price .Close}}</td>
+      <td class="num {{sign .D1}}" data-label="1D" data-sort="{{sortVal .D1}}">{{pct .D1}}</td>
+      <td class="num {{sign .W1}}" data-label="1W" data-sort="{{sortVal .W1}}">{{pct .W1}}</td>
+      <td class="num {{sign .M1}}" data-label="1M" data-sort="{{sortVal .M1}}">{{pct .M1}}</td>
+      <td class="num {{sign .YTD}}" data-label="YTD" data-sort="{{sortVal .YTD}}">{{pct .YTD}}</td>
+      <td class="num {{sign .Y1}}" data-label="1Y" data-sort="{{sortVal .Y1}}">{{pct .Y1}}</td>
+      <td class="num" data-label="vs 52w high" data-sort="{{sortVal .FromHigh}}">{{pct .FromHigh}}</td>
+      <td class="num" data-label="$ vol 20d" data-sort="{{sortVal .DollarVol}}">{{usd .DollarVol}}</td>
+    </tr>
+{{end}}
+{{define "head"}}
+    <thead><tr>
+      <th data-type="num" class="num">#</th>
+      <th data-type="text">Ticker</th>
+      <th data-type="num" class="num">Price</th>
+      <th data-type="num" class="num" title="Change since the previous close">1D</th>
+      <th data-type="num" class="num" title="Change over 5 trading days">1W</th>
+      <th data-type="num" class="num" title="Change over 21 trading days">1M</th>
+      <th data-type="num" class="num" title="Change since the last close of last year">YTD</th>
+      <th data-type="num" class="num" title="Change over 252 trading days">1Y</th>
+      <th data-type="num" class="num" title="Distance below the highest close of the last 252 trading days">vs 52w high</th>
+      <th data-type="num" class="num" title="Average daily traded value, 20 trading days">$ vol 20d</th>
+    </tr></thead>
+{{end}}

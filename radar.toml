@@ -245,3 +245,16 @@ min_stocks = 30                # a score signal needs this many ranked stocks on
 recent_days = 250              # the "last 12 months" column, trading days
 family_alpha = 0.05            # chance of any false "passes" across all signal x horizon pairs (Bonferroni)
 picks = 10                     # today's names shown per working signal
+
+[us]                           # issue #2: US large caps, daily prices from Yahoo's chart API (no key)
+# About the 50 largest US companies by market cap (list picked 2026-10-31; edit freely,
+# new tickers are fetched in full on the next run). Yahoo symbols: class shares use "-".
+tickers = [
+  "NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "BRK-B", "JPM",
+  "WMT", "LLY", "ORCL", "V", "MA", "NFLX", "XOM", "COST", "JNJ", "PLTR",
+  "HD", "ABBV", "BAC", "AMD", "PG", "UNH", "GE", "KO", "CVX", "CSCO",
+  "IBM", "WFC", "MS", "GS", "MU", "CAT", "PM", "AXP", "CRM", "MRK",
+  "TMUS", "RTX", "LRCX", "AMAT", "INTC", "PEP", "MCD", "LIN", "DIS", "UBER",
+]
+benchmarks = ["SPY", "QQQ"]    # S&P 500 and Nasdaq-100 ETFs, for comparison
+history_start = "2015-01-01"

@@ -54,6 +54,16 @@ and ex-rights days, shareholder meetings and the revenue/financial report
 deadlines. It reads MOPS and the TWSE/TPEx open data directly (no FinMind
 requests), each source at most every 6 hours.
 
+## US large caps
+
+`public/us.html` tracks the tickers in `[us]` of `radar.toml` (about the 50
+largest US companies, plus SPY and QQQ): price and 1D/1W/1M/YTD/1Y change,
+distance from the 52-week high and dollar volume. Daily bars come from Yahoo
+Finance's chart data (no key), once per ticker after each US close, into the
+`us_companies` and `us_prices` tables; Taiwan tables, paper and the backtester
+don't read them. Add or remove a ticker in `radar.toml`; a new one gets its
+history from `history_start` on the next run.
+
 ## Paper portfolios
 
 `public/paper.html` runs each strategy in `radar.toml` `[paper]` forward on
