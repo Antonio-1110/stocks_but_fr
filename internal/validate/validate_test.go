@@ -164,6 +164,10 @@ func TestSoftChecksDoNotBlock(t *testing.T) {
 }
 
 func TestHealthPage(t *testing.T) {
+	// Run checks revenue months against the clock: pin it to the fixtures'
+	// dates, or the test fails once real time moves past them (#79).
+	now = func() time.Time { return day }
+	t.Cleanup(func() { now = time.Now })
 	st, cfg := open(t)
 	dir := t.TempDir()
 	// Before any snapshot the page still renders.

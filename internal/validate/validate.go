@@ -71,9 +71,12 @@ type Check struct {
 // ErrFailed means a hard check failed; the run must not publish.
 var ErrFailed = errors.New("validate: hard checks failed")
 
+// now is the clock Run checks against; tests pin it to their fixtures' dates.
+var now = time.Now
+
 // Run is the `radar validate` command.
 func Run(ctx context.Context, cfg config.Config, st *store.Store) error {
-	m, err := Validate(ctx, st.DB, cfg.Backtest.Benchmark, time.Now().UTC(), codeSHA())
+	m, err := Validate(ctx, st.DB, cfg.Backtest.Benchmark, now().UTC(), codeSHA())
 	if err != nil && !errors.Is(err, ErrFailed) {
 		return err
 	}
