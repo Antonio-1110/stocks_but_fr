@@ -18,6 +18,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/us"
 	"github.com/Antonio-1110/stocks_but_fr/internal/paper"
+	"github.com/Antonio-1110/stocks_but_fr/internal/ratings"
 	"github.com/Antonio-1110/stocks_but_fr/internal/site"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 	"github.com/Antonio-1110/stocks_but_fr/internal/validate"
@@ -38,6 +39,7 @@ var collectors = []step{
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
 	{"tw-calendar", calendar.Collect},
 	{"us-prices", us.Collect}, // issue #2: US large caps, own tables
+	{"ratings", ratings.Run},  // issue #78: rate stocks, score past ratings; after both markets' prices
 	{"alerts", alerts.Run},    // last: Telegram on stocks newly passing a rule, from the fresh data
 	{"paper", paper.Run},      // paper portfolios trade on the same fresh data
 }
@@ -50,6 +52,7 @@ var renderers = []step{
 	{"health", validate.Render},   // after site: reuses its static/style.css
 	{"alpha", alpha.Render},       // after site: reuses its static/style.css
 	{"us", us.Render},             // after site: reuses its static/style.css
+	{"ratings", ratings.Render},   // after site: reuses its static/style.css
 }
 
 func main() {

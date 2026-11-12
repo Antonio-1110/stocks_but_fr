@@ -19,6 +19,7 @@ type Config struct {
 	Alerts   Alerts   `toml:"alerts"`
 	Paper    Paper    `toml:"paper"`
 	US       US       `toml:"us"`
+	Ratings  Ratings  `toml:"ratings"`
 }
 
 type Run struct {
@@ -354,6 +355,13 @@ func Default() Config {
 			Benchmarks:   []string{"SPY", "QQQ"},
 			HistoryStart: "2015-01-01",
 		},
+		Ratings: Ratings{
+			TWTop: 300, TWWatch: []string{}, TWMinPrice: 10, ADVDays: 20, MinCoverage: 0.9,
+			ShortHorizons: []int{5, 20}, LongHorizons: []int{60, 120},
+			ShortHighWeight: 0.5, ShortMonthWeight: 0.25, ShortWeekWeight: 0.25,
+			LongMomentumWeight: 0.25, LongMAWeight: 0.25, LongHighWeight: 0.25, LongRevenueWeight: 0.25,
+			RevenueDeadlineDay: 10, BackfillDays: 500, BackfillStep: 5,
+		},
 	}
 }
 
@@ -393,4 +401,26 @@ type US struct {
 	Tickers      []string `toml:"tickers"`       // Yahoo symbols, e.g. "BRK-B"
 	Benchmarks   []string `toml:"benchmarks"`    // index ETFs shown above the list
 	HistoryStart string   `toml:"history_start"` // YYYY-MM-DD, first full fetch starts here
+}
+
+// Ratings is [ratings]: daily 1-5 trend ratings for single stocks, logged and
+// scored against what happened (issue #78).
+type Ratings struct {
+	TWTop              int      `toml:"tw_top"`       // Taiwan: rate the N most traded common stocks...
+	TWWatch            []string `toml:"tw_watch"`     // ...plus these tickers
+	TWMinPrice         float64  `toml:"tw_min_price"` // NTD; cheaper stocks are left out of the top N
+	ADVDays            int      `toml:"adv_days"`     // traded value is averaged over this many days
+	MinCoverage        float64  `toml:"min_coverage"` // a day is rated once it has this share of the previous day's rows
+	ShortHorizons      []int    `toml:"short_horizons"`
+	LongHorizons       []int    `toml:"long_horizons"`
+	ShortHighWeight    float64  `toml:"short_high_weight"`
+	ShortMonthWeight   float64  `toml:"short_month_weight"`
+	ShortWeekWeight    float64  `toml:"short_week_weight"`
+	LongMomentumWeight float64  `toml:"long_momentum_weight"`
+	LongMAWeight       float64  `toml:"long_ma_weight"`
+	LongHighWeight     float64  `toml:"long_high_weight"`
+	LongRevenueWeight  float64  `toml:"long_revenue_weight"`
+	RevenueDeadlineDay int      `toml:"revenue_deadline_day"`
+	BackfillDays       int      `toml:"backfill_days"`
+	BackfillStep       int      `toml:"backfill_step"`
 }

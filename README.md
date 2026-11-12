@@ -64,6 +64,16 @@ Finance's chart data (no key), once per ticker after each US close, into the
 don't read them. Add or remove a ticker in `radar.toml`; a new one gets its
 history from `history_start` on the next run.
 
+## Stock ratings
+
+`public/ratings.html` rates single stocks 1 to 5 every trading day, short term
+(scored over 5 and 20 trading days) and long term (60 and 120): Taiwan's 300
+most traded common stocks plus `tw_watch`, and every `[us]` ticker. Each rating
+is stored with its date in `state.db` (`ratings`), and once a horizon has
+passed its return and the benchmark's go to `rating_outcomes`; the page shows
+hit rates by horizon and each stock's own record. Settings and weights:
+`[ratings]` in `radar.toml`. How it works: [docs/ratings.md](docs/ratings.md).
+
 ## Paper portfolios
 
 `public/paper.html` runs each strategy in `radar.toml` `[paper]` forward on

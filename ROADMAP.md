@@ -102,6 +102,15 @@ daily prices (Yahoo chart data, history from 2015) into their own tables and a
 US dashboard page. US backtests, paper portfolios, costs and a full SEC
 universe are not started.
 
+**Stock ratings (started 2026-11-12, #78)**: the owner asked for short- and
+long-term ratings on single Taiwan and US stocks, with a record of how
+accurate they are. Every trading day each rated stock gets a 1–5 short-term and
+long-term rating, saved with its date and scored when 5, 20, 60 and 120 trading
+days have passed; the Ratings page shows hit rates and each stock's record. The
+first run also rates about two years of past days as a labelled backtest.
+Details in [docs/ratings.md](docs/ratings.md). #79 fixed a date-dependent test
+that had stopped every daily run from 2026-11-08 to 11-12.
+
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names
 have no official listing date.

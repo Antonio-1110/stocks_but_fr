@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock ratings</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* Ratings-page-only rules; theme tokens come from static/style.css. */
+.co .tk { color: var(--cyan); }
+.co small { display: block; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.rt { display: inline-block; min-width: 1.6em; padding: 1px 4px; border: 1px solid var(--panel-edge); text-align: center; }
+.rt.r5, .rt.r4 { color: var(--up); border-color: var(--up); }
+.rt.r5 { background: rgba(255, 59, 107, 0.16); }
+.rt.r1, .rt.r2 { color: var(--down); border-color: var(--down); }
+.rt.r1 { background: rgba(43, 255, 136, 0.12); }
+.rt small { display: block; font-size: .6rem; color: var(--muted); }
+.good { color: var(--cyan); }
+.bad { color: var(--yellow); }
+.acc td small { display: block; color: var(--muted); font-size: .7rem; }
+.acc thead th, .buckets thead th { cursor: default; }
+.how { max-width: 76ch; }
+.how li { margin: 2px 0; }
+h3 { font: 600 .8rem/1.3 var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--violet); margin: 14px 0 4px; }
+.count { color: var(--muted); font-size: .78rem; margin: 0 0 4px; }
+@media (max-width: 720px) {
+  .stocks tbody tr, .acc tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stocks td.co, .acc td.co, .acc td.bk { grid-column: 1 / -1; }
+  .acc td.bk { white-space: normal; }
+}
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html">Paper</a>
+  <a href="alpha.html">Alpha</a>
+  <a href="ratings.html" aria-current="page">Ratings</a>
+  <a href="us.html">US</a>
+  <a href="calendar.html">Calendar</a>
+  <a href="health.html">Health</a>
+</nav>
+<header>
+  <h1 data-text="Stock ratings">Stock ratings</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b></p>
+</header>
+
+<main>
+<section class="panel">
+  <h2>How it works</h2>
+  <ul class="how muted">
+    <li>Every trading day each stock gets two ratings from 1 to 5: <b>short term</b> (scored over {{range $i, $h := .Cfg.ShortHorizons}}{{if $i}} and {{end}}{{$h}}{{end}} trading days) and <b>long term</b> (over {{range $i, $h := .Cfg.LongHorizons}}{{if $i}} and {{end}}{{$h}}{{end}}).</li>
+    <li>Short term: mostly how close the stock is to its 52-week high (the one signal that held up in both alpha-lab periods), plus a bigger 1-month gain and a smaller 1-week move. Long term: 12-month gain (skipping the latest month), distance above the 200-day average, closeness to the 52-week high and, in Taiwan, the latest monthly revenue YoY known by its filing deadline.</li>
+    <li>Ratings rank stocks against each other on the day: 5 is the strongest fifth, 1 the weakest. So "Up" means "likely to beat most of the list", which in a falling market can still be a loss. The tables below check both: did up and down calls get the direction right, and did they beat the benchmark.</li>
+    <li>Each rating is saved with its date and never changed. Once its horizon has passed it is scored from the <b>next</b> trading day's close (time to act on it) to the close that many trading days later, dividends included.</li>
+    <li><b>Live</b> rows are ratings made on the day. <b>Backtest</b> rows were rated after the fact on past days (every {{.Cfg.BackfillStep}}th trading day, about {{.Cfg.BackfillDays}} trading days back) with the same rules, to show accuracy from the start. US backtests use today's large caps, which flatters them (they're the ones that grew big).</li>
+  </ul>
+</section>
+
+{{range .Markets}}{{$m := .}}
+<section class="panel" id="{{.Code}}">
+  <h2>{{.Title}}</h2>
+  {{if .Date}}<p class="count">Rated on {{.Date}} (newest fully collected day), {{len .Rows}} stocks. Benchmark {{.Bench}}.</p>{{end}}
+  {{if not .Date}}
+  <p class="empty">No ratings yet. They start with the next daily run that has fully collected {{.Title}} prices.</p>
+  {{else}}
+  <h3>Accuracy: live</h3>
+  {{if .Live}}{{template "acc" (dict .Live .Bench)}}{{else}}
+  <p class="muted hint">Nothing scored yet: the first live ratings get scored {{.NextScore}}.</p>{{end}}
+  {{if .Backtest}}
+  <h3>Accuracy: backtest (rated after the fact)</h3>
+  {{template "acc" (dict .Backtest .Bench)}}
+  {{end}}
+
+  <h3>Today's ratings</h3>
+  <div class="filters"><input type="search" placeholder="Find a ticker or name" data-filter="{{.Code}}-list" aria-label="Find a ticker or name"></div>
+  <p class="muted hint">Sorted by long-term score. Tap a header to sort; tap a ticker for its {{if eq .Code "TW"}}Goodinfo{{else}}Yahoo Finance{{end}} page. "Calls right" is this stock's own record: of its past up and down ratings (live and backtest), how many got the {{.ShortH}}- and {{.LongH}}-day direction right.</p>
+  <table class="sortable stocks" id="{{.Code}}-list">
+    <thead><tr>
+      <th data-type="text">Ticker</th>
+      <th data-type="num" class="num" title="Short-term rating, 1-5 ({{.ShortH}} trading days and shorter)">Short</th>
+      <th data-type="num" class="num" title="Long-term rating, 1-5 ({{.LongH}} trading days and shorter)">Long</th>
+      <th data-type="num" class="num" title="Close vs the highest close of the last 252 trading days">vs 52w high</th>
+      <th data-type="num" class="num" title="Return over 5 trading days">1W</th>
+      <th data-type="num" class="num" title="Return over 21 trading days">1M</th>
+      <th data-type="num" class="num" title="Return over 12 months, skipping the latest month">12M ex 1M</th>
+      <th data-type="num" class="num" title="Close vs its 200-day average">vs 200d</th>
+      {{if .HasRevenue}}<th data-type="num" class="num" title="Latest monthly revenue YoY known by its filing deadline">Rev YoY</th>{{end}}
+      <th data-type="num" class="num" title="Past up/down ratings whose {{.ShortH}}-day direction was right">{{.ShortH}}d calls right</th>
+      <th data-type="num" class="num" title="Past up/down ratings whose {{.LongH}}-day direction was right">{{.LongH}}d calls right</th>
+    </tr></thead>
+    <tbody>{{range .Rows}}
+    <tr>
+      <td class="co" data-sort="{{.Ticker}}"><a href="{{.Link}}" rel="noopener"><b class="tk">{{.Ticker}}</b></a><small>{{.Name}}</small></td>
+      <td class="num" data-label="Short" data-sort="{{sortVal .ShortScore}}"><span class="rt r{{.Short}}">{{.Short}}<small>{{label .Short}}</small></span></td>
+      <td class="num" data-label="Long" data-sort="{{sortVal .LongScore}}"><span class="rt r{{.Long}}">{{.Long}}<small>{{label .Long}}</small></span></td>
+      <td class="num" data-label="vs 52w high" data-sort="{{sortVal .High}}">{{pct .High}}</td>
+      <td class="num {{sign .Week}}" data-label="1W" data-sort="{{sortVal .Week}}">{{pct .Week}}</td>
+      <td class="num {{sign .Month}}" data-label="1M" data-sort="{{sortVal .Month}}">{{pct .Month}}</td>
+      <td class="num {{sign .Year}}" data-label="12M ex 1M" data-sort="{{sortVal .Year}}">{{pct .Year}}</td>
+      <td class="num {{sign .MA}}" data-label="vs 200d" data-sort="{{sortVal .MA}}">{{pct .MA}}</td>
+      {{if $m.HasRevenue}}<td class="num {{sign .RevYoY}}" data-label="Rev YoY" data-sort="{{sortVal .RevYoY}}">{{yoy .RevYoY}}</td>{{end}}
+      <td class="num" data-label="{{$m.ShortH}}d right" data-sort="{{recSort .ShortRec}}">{{rec .ShortRec}}</td>
+      <td class="num" data-label="{{$m.LongH}}d right" data-sort="{{recSort .LongRec}}">{{rec .LongRec}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+{{end}}
+<footer class="muted">Ratings are a ranking from price and revenue data, not advice. Settings: <code>[ratings]</code> in radar.toml (issue #78).</footer>
+</main>
+<script>
+// Click a header to sort its table; numbers start high-to-low, text A-Z. No dependencies.
+document.querySelectorAll("table.sortable").forEach(function (table) {
+  var tbody = table.tBodies[0], headers = table.tHead.rows[0].cells;
+  Array.prototype.forEach.call(headers, function (th, col) {
+    var type = th.getAttribute("data-type");
+    if (!type) return;
+    th.addEventListener("click", function () {
+      var asc = th.getAttribute("aria-sort") ? th.getAttribute("aria-sort") === "descending" : type === "text";
+      Array.prototype.forEach.call(headers, function (c) { c.removeAttribute("aria-sort"); });
+      th.setAttribute("aria-sort", asc ? "ascending" : "descending");
+      var rows = Array.prototype.slice.call(tbody.rows);
+      rows.sort(function (a, b) {
+        var x = a.cells[col].getAttribute("data-sort"), y = b.cells[col].getAttribute("data-sort");
+        if (type === "num") {
+          if (x === "" || y === "") return (x === "") - (y === "");
+          return asc ? x - y : y - x;
+        }
+        return asc ? x.localeCompare(y) : y.localeCompare(x);
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+    });
+  });
+});
+// Search box: show rows whose ticker or name contains the text.
+document.querySelectorAll("input[data-filter]").forEach(function (input) {
+  var table = document.getElementById(input.getAttribute("data-filter"));
+  input.addEventListener("input", function () {
+    var q = input.value.trim().toLowerCase();
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
+      r.hidden = q !== "" && r.cells[0].textContent.toLowerCase().indexOf(q) < 0;
+    });
+  });
+});
+</script>
+</body>
+</html>
+{{define "acc"}}{{$bench := .Bench}}
+  <table class="acc">
+    <thead><tr>
+      <th>Horizon</th>
+      <th class="num" title="Ratings scored, and the rating days they came from">Scored</th>
+      <th class="num" title="Up (4-5) and down (1-2) calls whose direction was right">Direction right</th>
+      <th class="num" title="Up calls (4-5) that rose, vs the share of all rated stocks that rose">Up calls rose</th>
+      <th class="num" title="Down calls (1-2) that fell, vs the share of all rated stocks that fell">Down calls fell</th>
+      <th class="num" title="Up calls that beat {{$bench}} plus down calls that lagged it">Beat / lagged {{$bench}}</th>
+      <th class="num" title="Average return minus {{$bench}}'s, by rating 1 to 5">Avg vs {{$bench}}: 1 · 2 · 3 · 4 · 5</th>
+      <th class="num" title="Average vs {{$bench}} of the 5s minus the 1s: the bigger, the better the ratings sort winners from losers">5s minus 1s</th>
+    </tr></thead>
+    <tbody>{{range .Accs}}
+    <tr>
+      <td class="co"><b>{{.Horizon}} days</b><small>{{.Term}} term, {{.First}} to {{.Last}}</small></td>
+      <td class="num" data-label="Scored">{{.N}}<small>{{.Days}} days</small></td>
+      <td class="num {{better .DirRate half}}" data-label="Direction right">{{share .DirRate}}</td>
+      <td class="num {{better .UpRate .BaseUp}}" data-label="Up calls rose">{{share .UpRate}}<small>all: {{share .BaseUp}}</small></td>
+      <td class="num {{better .DownRate (sub 1 .BaseUp)}}" data-label="Down calls fell">{{share .DownRate}}<small>all: {{share (sub 1 .BaseUp)}}</small></td>
+      <td class="num {{better .BeatRate half}}" data-label="Beat / lagged">{{share .BeatRate}}</td>
+      <td class="num bk" data-label="Avg vs {{$bench}} by rating 1 · 2 · 3 · 4 · 5">{{range $i, $b := .Buckets}}{{if $i}} · {{end}}<span class="{{sign .Excess}}">{{pct .Excess}}</span>{{end}}</td>
+      <td class="num {{sign .Spread}}" data-label="5s minus 1s">{{pct .Spread}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+{{end}}

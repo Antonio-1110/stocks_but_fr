@@ -258,3 +258,25 @@ tickers = [
 ]
 benchmarks = ["SPY", "QQQ"]    # S&P 500 and Nasdaq-100 ETFs, for comparison
 history_start = "2015-01-01"
+
+[ratings]                      # issue #78: a 1-5 trend rating per stock each day, logged and scored when each horizon ends
+# Universe: Taiwan's most traded common stocks plus a watchlist, and every [us] ticker.
+tw_top = 300                   # rate the N common stocks with the highest average traded value...
+tw_watch = []                  # ...plus these Taiwan tickers whatever their size (e.g. ["2330", "0056"])
+tw_min_price = 10              # NTD; cheaper stocks are left out of the top N
+adv_days = 20                  # traded value is averaged over this many trading days
+min_coverage = 0.9             # rate a day once it has this share of the previous day's rows
+# Ratings are quintiles within each market on the day: 5 = strongest fifth, 1 = weakest.
+# A score is the weighted average of percentile ranks (0..1) of its parts.
+short_horizons = [5, 20]       # trading days the short-term rating is scored over
+long_horizons = [60, 120]      # trading days the long-term rating is scored over
+short_high_weight = 0.5        # closer to the 52-week high (the alpha lab's one robust signal, #76)
+short_month_weight = 0.25      # bigger 1-month return
+short_week_weight = 0.25       # smaller 1-week return (short-term reversal)
+long_momentum_weight = 0.25    # bigger 12-month return, skipping the latest month
+long_ma_weight = 0.25          # further above the 200-day average
+long_high_weight = 0.25        # closer to the 52-week high
+long_revenue_weight = 0.25     # Taiwan only: higher latest monthly revenue YoY, known by its deadline
+revenue_deadline_day = 10      # a month's revenue counts from this day of the next month
+backfill_days = 500            # the first run also rates past days this far back (trading days), as a backtest...
+backfill_step = 5              # ...every this many trading days
