@@ -47,6 +47,8 @@ jobs:
       - name: Download database
         run: |
           mkdir -p data
+          # GitHub answers the odd release call with a 5xx; retry (#81).
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
           # Until daily.yml has moved the data (#62), read this repo's old release.
           if [ -z "$GH_TOKEN" ] || ! gh release view "$DATA_TAG" >/dev/null 2>&1; then
             echo "GH_TOKEN=$OLD_TOKEN" >> "$GITHUB_ENV"
@@ -63,7 +65,7 @@ jobs:
           fi
           for name in "$DB_ASSET" "$DB_ASSET.new"; do
             if grep -qxF "$name" <<<"$assets"; then
-              gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz
+              retry gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz --clobber
               gunzip data/radar.db.gz
               ls -lh data/radar.db
               exit 0
@@ -75,11 +77,16 @@ jobs:
       # renders empty; nothing here is saved back, so that is harmless.
       - name: Download state
         run: |
-          if gh release download "$DATA_TAG" --pattern state.db.gz --output data/state.db.gz 2>/dev/null; then
-            gunzip data/state.db.gz
-          else
+          # GitHub answers the odd release call with a 5xx; retry (#81).
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
+          # Only a release with no state asset renders an empty Paper page; a
+          # failed download stops the publish, so the live page is kept (#81).
+          if ! gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>/dev/null | grep -qxF state.db.gz; then
             echo "No state.db.gz on the release yet"
+            exit 0
           fi
+          retry gh release download "$DATA_TAG" --pattern state.db.gz --output data/state.db.gz --clobber
+          gunzip data/state.db.gz
 
       - name: Render
         run: ./radar render

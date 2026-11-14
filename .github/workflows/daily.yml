@@ -101,13 +101,34 @@ jobs:
       - name: Restore database
         run: |
           mkdir -p data
-          if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
+          # GitHub answers the odd release call with a 5xx; retry (#81).
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
+          # A missing release answers "release not found" at once; anything
+          # else (a 5xx, a timeout) is retried before giving up.
+          list_assets() {
+            local out i
+            for i in 1 2 3 4; do
+              if out=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
+                echo "$out"
+                return 0
+              fi
+              if grep -q "release not found" <<<"$out"; then
+                echo "$out"
+                return 1
+              fi
+              echo "retry $i: gh release view: $out" >&2
+              sleep $((i * 10))
+            done
+            echo "$out"
+            return 1
+          }
+          if ! assets=$(list_assets); then
             if ! grep -q "release not found" <<<"$assets"; then
               echo "$assets"
               exit 1
             fi
             export GH_TOKEN="$OLD_TOKEN" GH_REPO="$OLD_REPO"
-            if ! assets=$(gh release view "$DATA_TAG" --json assets -q '.assets[].name' 2>&1); then
+            if ! assets=$(list_assets); then
               if grep -q "release not found" <<<"$assets"; then
                 echo "No '$DATA_TAG' release yet; starting with an empty database"
                 exit 0
@@ -122,7 +143,7 @@ jobs:
           # copy (#49).
           for name in "$DB_ASSET.new" "$DB_ASSET"; do
             if grep -qxF "$name" <<<"$assets"; then
-              gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz
+              retry gh release download "$DATA_TAG" --pattern "$name" --output data/radar.db.gz --clobber
               gunzip data/radar.db.gz
               ls -lh data/radar.db
               exit 0
@@ -140,13 +161,17 @@ jobs:
       # silently starting the portfolios over.
       - name: Restore state
         run: |
+          # GitHub answers the odd release call with a 5xx; retry (#81).
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "retry $i: $*"; sleep $((i * 10)); done; return 1; }
           if ! gh release view "$DATA_TAG" >/dev/null 2>&1; then
             export GH_TOKEN="$OLD_TOKEN" GH_REPO="$OLD_REPO"   # first run on the data repo (#62)
           fi
-          assets=$(gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[].name' 2>/dev/null || true)
+          # Without the retry a GitHub hiccup here looked like "no state saved"
+          # and stopped the run with a misleading message.
+          assets=$(retry gh api "repos/$GH_REPO/releases/tags/$DATA_TAG" -q '.assets[].name' 2>/dev/null || true)
           for name in "$STATE_ASSET.new" "$STATE_ASSET"; do
             if grep -qxF "$name" <<<"$assets"; then
-              gh release download "$DATA_TAG" --pattern "$name" --output data/state.db.gz
+              retry gh release download "$DATA_TAG" --pattern "$name" --output data/state.db.gz --clobber
               gunzip data/state.db.gz
               ls -lh data/state.db
               exit 0
