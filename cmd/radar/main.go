@@ -17,6 +17,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/margin"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/valuation"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/us"
 	"github.com/Antonio-1110/stocks_but_fr/internal/paper"
 	"github.com/Antonio-1110/stocks_but_fr/internal/ratings"
@@ -39,6 +40,8 @@ var collectors = []step{
 	{"tw-revenue", revenue.Collect}, // needs the TW universe in companies
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
 	{"tw-margin", margin.Collect},   // issue #84: 融資融券, needs the TW universe and price days
+	// issue #85: P/E, P/B, yield, foreign holdings; the last FinMind step
+	{"tw-valuation", valuation.Collect},
 	{"tw-calendar", calendar.Collect},
 	{"us-prices", us.Collect}, // issue #2: US large caps, own tables
 	{"ratings", ratings.Run},  // issue #78: rate stocks, score past ratings; after both markets' prices

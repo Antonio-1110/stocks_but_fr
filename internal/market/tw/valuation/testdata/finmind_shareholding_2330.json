@@ -1,0 +1,36 @@
+{
+"msg": "success",
+"status": 200,
+"data": [
+{
+"date": "2026-11-03",
+"stock_id": "2330",
+"stock_name": "台積電",
+"InternationalCode": "TW0002330008",
+"ForeignInvestmentRemainingShares": 8194636447,
+"ForeignInvestmentShares": 17737733620,
+"ForeignInvestmentRemainRatio": 31.6,
+"ForeignInvestmentSharesRatio": 68.39,
+"ForeignInvestmentUpperLimitRatio": 100.0,
+"ChineseInvestmentUpperLimitRatio": 100.0,
+"NumberOfSharesIssued": 25932370067,
+"RecentlyDeclareDate": "2026-05-26",
+"note": ""
+},
+{
+"date": "2026-11-04",
+"stock_id": "2330",
+"stock_name": "台積電",
+"InternationalCode": "TW0002330008",
+"ForeignInvestmentRemainingShares": 8217949139,
+"ForeignInvestmentShares": 17714420928,
+"ForeignInvestmentRemainRatio": 31.68,
+"ForeignInvestmentSharesRatio": 68.31,
+"ForeignInvestmentUpperLimitRatio": 100.0,
+"ChineseInvestmentUpperLimitRatio": 100.0,
+"NumberOfSharesIssued": 25932370067,
+"RecentlyDeclareDate": "2026-05-26",
+"note": ""
+}
+]
+}
