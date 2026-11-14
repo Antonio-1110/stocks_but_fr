@@ -26,9 +26,18 @@
 .how { max-width: 76ch; }
 .how li { margin: 2px 0; }
 h3 { font: 600 .8rem/1.3 var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--violet); margin: 14px 0 4px; }
-.count { color: var(--muted); font-size: .78rem; margin: 0 0 4px; }
+.rated { color: var(--muted); font-size: .78rem; margin: 0 0 4px; } /* not .count: that is the cyan badge in style.css */
+.pick { margin: 8px 0 4px; }
+.pick button[aria-pressed="true"] { color: var(--bg); background: var(--magenta); border-color: var(--magenta); box-shadow: 0 0 14px rgba(255, 42, 109, 0.55); }
+.more .shown { font-size: .75rem; align-self: center; }
+section[id] { scroll-margin-top: calc(var(--navh) + 8px); }
 @media (max-width: 720px) {
-  .stocks tbody tr, .acc tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .acc tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Shorter stock cards (#88): name on the ticker's line, 4 values a row,
+     the rating's word label left to the colour. */
+  .stocks tbody tr { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stocks .co small { display: inline; margin-left: 6px; }
+  .stocks .rt small { display: none; }
   .stocks td.co, .acc td.co, .acc td.bk { grid-column: 1 / -1; }
   .acc td.bk { white-space: normal; }
 }
@@ -49,12 +58,13 @@ h3 { font: 600 .8rem/1.3 var(--display); text-transform: uppercase; letter-spaci
 </nav>
 <header>
   <h1 data-text="Stock ratings">Stock ratings</h1>
-  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b></p>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b>{{range .Markets}} <span class="sep">//</span> <a href="#{{.Code}}">{{.Title}}</a>{{end}}</p>
 </header>
 
 <main>
 <section class="panel">
-  <h2>How it works</h2>
+  <details>
+  <summary><h2>How it works</h2></summary>
   <ul class="how muted">
     <li>Every trading day each stock gets two ratings from 1 to 5: <b>short term</b> (scored over {{range $i, $h := .Cfg.ShortHorizons}}{{if $i}} and {{end}}{{$h}}{{end}} trading days) and <b>long term</b> (over {{range $i, $h := .Cfg.LongHorizons}}{{if $i}} and {{end}}{{$h}}{{end}}).</li>
     <li>Short term: mostly how close the stock is to its 52-week high (the one signal that held up in both alpha-lab periods), plus a bigger 1-month gain and a smaller 1-week move. Long term: 12-month gain (skipping the latest month), distance above the 200-day average, closeness to the 52-week high and, in Taiwan, the latest monthly revenue YoY known by its filing deadline.</li>
@@ -62,25 +72,25 @@ h3 { font: 600 .8rem/1.3 var(--display); text-transform: uppercase; letter-spaci
     <li>Each rating is saved with its date and never changed. Once its horizon has passed it is scored from the <b>next</b> trading day's close (time to act on it) to the close that many trading days later, dividends included.</li>
     <li><b>Live</b> rows are ratings made on the day. <b>Backtest</b> rows were rated after the fact on past days (every {{.Cfg.BackfillStep}}th trading day, about {{.Cfg.BackfillDays}} trading days back) with the same rules, to show accuracy from the start. US backtests use today's large caps, which flatters them (they're the ones that grew big).</li>
   </ul>
+  </details>
 </section>
 
 {{range .Markets}}{{$m := .}}
 <section class="panel" id="{{.Code}}">
   <h2>{{.Title}}</h2>
-  {{if .Date}}<p class="count">Rated on {{.Date}} (newest fully collected day), {{len .Rows}} stocks. Benchmark {{.Bench}}.</p>{{end}}
+  {{if .Date}}<p class="rated">Rated on {{.Date}} (newest fully collected day), {{len .Rows}} stocks. Benchmark {{.Bench}}.</p>{{end}}
   {{if not .Date}}
   <p class="empty">No ratings yet. They start with the next daily run that has fully collected {{.Title}} prices.</p>
   {{else}}
-  <h3>Accuracy: live</h3>
-  {{if .Live}}{{template "acc" (dict .Live .Bench)}}{{else}}
-  <p class="muted hint">Nothing scored yet: the first live ratings get scored {{.NextScore}}.</p>{{end}}
-  {{if .Backtest}}
-  <h3>Accuracy: backtest (rated after the fact)</h3>
-  {{template "acc" (dict .Backtest .Bench)}}
-  {{end}}
-
   <h3>Today's ratings</h3>
   <div class="filters"><input type="search" placeholder="Find a ticker or name" data-filter="{{.Code}}-list" aria-label="Find a ticker or name"></div>
+  <div class="views pick" role="group" aria-label="Show" data-for="{{.Code}}-list">
+    <button type="button" data-pick="" aria-pressed="true">All</button>
+    <button type="button" data-pick="s5" aria-pressed="false" title="Short-term rating 5">Short 5</button>
+    <button type="button" data-pick="l5" aria-pressed="false" title="Long-term rating 5">Long 5</button>
+    <button type="button" data-pick="b5" aria-pressed="false" title="5 on both">Both 5</button>
+    <button type="button" data-pick="l1" aria-pressed="false" title="Long-term rating 1">Long 1</button>
+  </div>
   <p class="muted hint">Sorted by long-term score. Tap a header to sort; tap a ticker for its {{if eq .Code "TW"}}Goodinfo{{else}}Yahoo Finance{{end}} page. "Calls right" is this stock's own record: of its past up and down ratings (live and backtest), how many got the {{.ShortH}}- and {{.LongH}}-day direction right.</p>
   <table class="sortable stocks" id="{{.Code}}-list">
     <thead><tr>
@@ -97,7 +107,7 @@ h3 { font: 600 .8rem/1.3 var(--display); text-transform: uppercase; letter-spaci
       <th data-type="num" class="num" title="Past up/down ratings whose {{.LongH}}-day direction was right">{{.LongH}}d calls right</th>
     </tr></thead>
     <tbody>{{range .Rows}}
-    <tr>
+    <tr data-s="{{.Short}}" data-l="{{.Long}}">
       <td class="co" data-sort="{{.Ticker}}"><a href="{{.Link}}" rel="noopener"><b class="tk">{{.Ticker}}</b></a><small>{{.Name}}</small></td>
       <td class="num" data-label="Short" data-sort="{{sortVal .ShortScore}}"><span class="rt r{{.Short}}">{{.Short}}<small>{{label .Short}}</small></span></td>
       <td class="num" data-label="Long" data-sort="{{sortVal .LongScore}}"><span class="rt r{{.Long}}">{{.Long}}<small>{{label .Long}}</small></span></td>
@@ -112,6 +122,17 @@ h3 { font: 600 .8rem/1.3 var(--display); text-transform: uppercase; letter-spaci
     </tr>{{end}}
     </tbody>
   </table>
+  <p class="more" data-more="{{.Code}}-list" hidden><button type="button" data-step="30">Show 30 more</button> <button type="button" data-step="all">Show all</button> <span class="muted shown"></span></p>
+  <h3>Accuracy: live</h3>
+  {{if .Live}}{{template "acc" (dict .Live .Bench)}}{{else}}
+  <p class="muted hint">Nothing scored yet: the first live ratings get scored {{.NextScore}}.</p>{{end}}
+  {{if .Backtest}}
+  <details>
+  <summary><h3>Accuracy: backtest (rated after the fact)</h3></summary>
+  {{template "acc" (dict .Backtest .Bench)}}
+  </details>
+  {{end}}
+
   {{end}}
 </section>
 {{end}}
@@ -141,15 +162,52 @@ document.querySelectorAll("table.sortable").forEach(function (table) {
     });
   });
 });
-// Search box: show rows whose ticker or name contains the text.
-document.querySelectorAll("input[data-filter]").forEach(function (input) {
-  var table = document.getElementById(input.getAttribute("data-filter"));
-  input.addEventListener("input", function () {
-    var q = input.value.trim().toLowerCase();
+// Search box, rating buttons and paging (#88): a row shows when it matches
+// both, and only the first `limit` matching rows show until "show more".
+document.querySelectorAll("table.stocks").forEach(function (table) {
+  var id = table.id, page = 30, limit = page, pick = "";
+  var input = document.querySelector('input[data-filter="' + id + '"]');
+  var more = document.querySelector('[data-more="' + id + '"]');
+  var group = document.querySelector('.pick[data-for="' + id + '"]');
+  function keep(r) {
+    var s = r.getAttribute("data-s"), l = r.getAttribute("data-l");
+    switch (pick) {
+      case "s5": return s === "5";
+      case "l5": return l === "5";
+      case "b5": return s === "5" && l === "5";
+      case "l1": return l === "1";
+    }
+    return true;
+  }
+  function apply() {
+    var q = input ? input.value.trim().toLowerCase() : "", n = 0;
     Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
-      r.hidden = q !== "" && r.cells[0].textContent.toLowerCase().indexOf(q) < 0;
+      var ok = keep(r) && (q === "" || r.cells[0].textContent.toLowerCase().indexOf(q) >= 0);
+      if (ok) n++;
+      r.hidden = !ok || n > limit;
+    });
+    if (more) {
+      more.hidden = n <= limit;
+      more.querySelector(".shown").textContent = Math.min(n, limit) + " of " + n;
+    }
+  }
+  function reset() { limit = page; apply(); }
+  if (input) input.addEventListener("input", reset);
+  if (group) group.querySelectorAll("button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      pick = b.getAttribute("data-pick");
+      group.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      reset();
     });
   });
+  if (more) more.querySelectorAll("button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      limit = b.getAttribute("data-step") === "all" ? Infinity : limit + page; apply();
+    });
+  });
+  // Sorting reorders rows: re-apply so the first `limit` in the new order show.
+  table.tHead.addEventListener("click", function () { setTimeout(apply, 0); });
+  apply();
 });
 </script>
 </body>
