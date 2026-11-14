@@ -96,6 +96,15 @@ holds in both periods; revenue news works since 2020 only; 投信 signals faded.
 Details in [docs/alpha-lab.md](docs/alpha-lab.md). Next candidates: a paper
 portfolio on the 52-week-high signal, and collecting margin/short data (融資融券).
 
+**More Taiwan data (done 2026-11-14, #84, #85, #14)**: three new daily
+per-stock tables: margin and short balances (`tw_margin`, 融資融券), P/E, P/B
+and dividend yield (`tw_valuations`), and foreign ownership with shares issued
+(`tw_foreign_holdings`, so market cap is now known). History backfills from
+FinMind over the first dozen or so hourly runs; recent days come from TWSE and
+TPEx reports. Every collect step's outcome is logged in `source_runs`, and
+`radar health` prints it. Not done: the Health page strip (#90), and
+`radar validate` doesn't yet guard the new tables against lost rows.
+
 **US large caps (started 2026-10-31, #2)**: the owner asked to start on US
 stocks with the biggest companies. About 50 large caps plus SPY and QQQ get
 daily prices (Yahoo chart data, history from 2015) into their own tables and a
