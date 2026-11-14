@@ -1,0 +1,178 @@
+# Tell the owner when the daily run fails or stops running (#80).
+#
+# From 2026-11-08 to 11-12 every daily run failed at the tests and nobody
+# noticed for four days (#79). This workflow watches `daily` and `publish`:
+#
+# - A failed run opens an issue labelled `run-failure`, assigned to the owner
+#   (GitHub emails the assignee), naming the failed jobs and steps. Further
+#   failures add at most one comment per Taipei day to the same issue.
+#   Telegram gets a message when the issue opens and when it closes, if the
+#   TELEGRAM_* secrets are set.
+# - The next successful run of the same workflow closes the issue.
+# - Every 6 hours a watchdog checks that `daily` succeeded in the last 30
+#   hours, which catches runs that never start (GitHub skips or disables
+#   scheduled runs) as well as runs stuck in the queue.
+#
+# Issues hold only job and step names, times and the run link: nothing from
+# the private database.
+
+name: watch
+
+on:
+  workflow_run:
+    workflows: [daily, publish]
+    types: [completed]
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+# One at a time, so two failures never open two issues.
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  issues: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  TZ: Asia/Taipei
+  LABEL: run-failure
+  STALE_HOURS: "30"
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the run
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "retry $i: $*" >&2; sleep $((i * 10)); done; return 1; }
+
+          # Telegram is best effort: a missing secret or a failed send never
+          # fails this job, and the token is never printed.
+          telegram() {
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+              echo "Telegram secrets not set; skipping the message"
+              return 0
+            fi
+            curl -sS -o /dev/null --max-time 20 \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=$1" \
+              --data-urlencode "disable_web_page_preview=true" \
+              || echo "::warning::Telegram message not sent"
+          }
+
+          # The open issue for a workflow, if any.
+          open_issue() {
+            retry gh issue list --label "$LABEL" --state open --limit 50 --json number,title \
+              -q ".[] | select(.title == \"$1\") | .number" | head -1
+          }
+
+          # Open an issue, or comment on the open one at most once a Taipei day.
+          raise() {
+            local title=$1 body=$2 n last
+            gh label create "$LABEL" --color D93F0B --description "The daily or publish run is failing (#80)" 2>/dev/null || true
+            n=$(open_issue "$title")
+            if [ -z "$n" ]; then
+              n=$(gh issue create --title "$title" --label "$LABEL" \
+                --assignee "$GITHUB_REPOSITORY_OWNER" --body "$body" | grep -oE '[0-9]+$')
+              echo "Opened issue #$n"
+              telegram "stocks_but_fr: $title. $(head -1 <<<"$body") See https://github.com/$GH_REPO/issues/$n"
+              return 0
+            fi
+            last=$(retry gh api "repos/$GH_REPO/issues/$n" -q .updated_at)
+            if [ "$(date -d "$last" +%F)" = "$(date +%F)" ]; then
+              echo "Issue #$n already updated today; not commenting again"
+              return 0
+            fi
+            retry gh issue comment "$n" --body "$body" >/dev/null
+            echo "Commented on issue #$n"
+          }
+
+          # Close the open issue once a run of the workflow succeeds again.
+          recover() {
+            local title=$1 n
+            n=$(open_issue "$title")
+            if [ -z "$n" ]; then
+              echo "No open '$title' issue"
+              return 0
+            fi
+            retry gh issue close "$n" --reason completed \
+              --comment "Recovered: [run $RUN_ID]($RUN_URL) ($RUN_EVENT, $(date '+%F %H:%M') Taipei) succeeded."
+            echo "Closed issue #$n"
+            telegram "stocks_but_fr: $title is fixed; the latest run succeeded."
+          }
+
+          if [ "$EVENT" = workflow_run ]; then
+            # Runs on other branches never touch the saved data or the site.
+            if [ "$RUN_BRANCH" != "${{ github.event.repository.default_branch }}" ]; then
+              echo "Run on $RUN_BRANCH; ignoring"
+              exit 0
+            fi
+            title="Run failing: $RUN_NAME"
+            case "$CONCLUSION" in
+              success)
+                recover "$title"
+                if [ "$RUN_NAME" = daily ]; then
+                  recover "Run stalled: daily"
+                fi
+                ;;
+              failure|timed_out|startup_failure)
+                # Which jobs and steps failed, so the owner (or a thread) can
+                # start from the right place without opening the logs.
+                failed=$(retry gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=50" -q '
+                  .jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled")
+                  | "- job **\(.name)** (\(.conclusion)): " +
+                    ([.steps[]? | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled") | .name] | join(", ") | if . == "" then "no step reported" else "step " + . end)')
+                body="The $RUN_NAME run [$RUN_ID]($RUN_URL) ended with **$CONCLUSION** at $(date '+%F %H:%M') Taipei ($RUN_EVENT, commit ${RUN_SHA:0:7}).
+
+          ${failed:-"- no failed job reported"}
+
+          While this is open, the database and site keep the last good run's data. A test failure stops collection entirely (#43), so fix it soon. This issue closes itself when a $RUN_NAME run succeeds."
+                raise "$title" "$body"
+                ;;
+              *)
+                echo "Run $RUN_ID ended $CONCLUSION; nothing to do"
+                ;;
+            esac
+            exit 0
+          fi
+
+          # Watchdog (schedule or manual): has daily succeeded recently?
+          last=$(retry gh api "repos/$GH_REPO/actions/workflows/daily.yml/runs?status=success&per_page=1" \
+            -q '.workflow_runs[0].updated_at // empty')
+          if [ -z "$last" ]; then
+            echo "No successful daily run yet; nothing to compare"
+            exit 0
+          fi
+          age=$(( ($(date +%s) - $(date -d "$last" +%s)) / 3600 ))
+          echo "Last successful daily run: $(date -d "$last" '+%F %H:%M') Taipei, ${age}h ago"
+          if [ "$age" -lt "$STALE_HOURS" ]; then
+            exit 0
+          fi
+          latest=$(retry gh api "repos/$GH_REPO/actions/workflows/daily.yml/runs?per_page=1" \
+            -q '.workflow_runs[0] | "\(.status)/\(.conclusion // "-") at \(.created_at), \(.html_url)"')
+          state=$(retry gh api "repos/$GH_REPO/actions/workflows/daily.yml" -q .state)
+          body="No daily run has succeeded for ${age} hours (last success $(date -d "$last" '+%F %H:%M') Taipei).
+
+          - latest daily run: ${latest:-none}
+          - workflow state: $state (GitHub disables schedules after 60 days without repo activity; re-enable it on the Actions tab)
+
+          Start one by hand from the Actions tab (daily > Run workflow). This issue closes itself when a daily run succeeds."
+          raise "Run stalled: daily" "$body"

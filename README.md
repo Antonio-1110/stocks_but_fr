@@ -47,6 +47,11 @@ market data never rewinds them. `radar` attaches it automatically. If
 `state.db.gz` goes missing the run stops rather than restarting the
 portfolios; rename `state.prev.db.gz` to restore it.
 
+`.github/workflows/watch.yml` (#80) opens a `run-failure` issue assigned to
+the owner (and sends Telegram, if set) when a `daily` or `publish` run fails,
+or when no daily run has succeeded for 30 hours; the issue closes itself on
+the next successful run.
+
 ## Taiwan daily datasets
 
 Besides prices, revenue and flows, `radar collect` keeps these per stock per
