@@ -98,10 +98,17 @@ func TestValidateBlocksBadData(t *testing.T) {
 			VALUES ('TW', '2330', '2026-12-01', 10, 11, 9, 10, 10)`, "price dated in the future"},
 		{"lost prices", `DELETE FROM prices WHERE date = '2026-10-08'`, "prices rows not lost"},
 		{"lost revenue", `DELETE FROM monthly_revenue`, "monthly_revenue rows not lost"},
+		{"lost margin rows", `DELETE FROM tw_margin`, "tw_margin rows not lost"},
+		{"dropped margin table", `DROP TABLE tw_margin`, "tw_margin rows not lost"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			st, cfg := open(t)
+			// A newer dataset (#91): counted once it exists.
+			if _, err := st.DB.Exec(`CREATE TABLE tw_margin (ticker TEXT, date TEXT);
+				INSERT INTO tw_margin VALUES ('2330', '2026-10-07'), ('2330', '2026-10-08')`); err != nil {
+				t.Fatal(err)
+			}
 			if err := Run(context.Background(), cfg, st); err != nil { // previous snapshot
 				t.Fatal(err)
 			}

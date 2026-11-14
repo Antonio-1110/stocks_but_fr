@@ -40,6 +40,11 @@ const maxRowDrop = 0.01
 // corporate_events is left out: it replaces upcoming events on each fetch.)
 var tables = []string{"companies", "prices", "monthly_revenue", "institutional_flows"}
 
+// optionalTables are counted the same way once their collector has created
+// them (#91). A table missing now that a previous snapshot counted fails the
+// rows-not-lost check like any other loss.
+var optionalTables = []string{"tw_margin", "tw_valuations", "tw_foreign_holdings", "us_prices"}
+
 // Manifest describes one snapshot of the database.
 type Manifest struct {
 	ID       string            `json:"id"`
@@ -129,6 +134,20 @@ func Validate(ctx context.Context, db *sql.DB, benchmark string, now time.Time, 
 		}
 		m.Rows[t] = n
 	}
+	for _, t := range optionalTables {
+		var exists int64
+		if err := q(&exists, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, t); err != nil {
+			return m, fmt.Errorf("look up %s: %w", t, err)
+		}
+		if exists == 0 {
+			continue
+		}
+		var n int64
+		if err := q(&n, `SELECT COUNT(*) FROM `+t); err != nil {
+			return m, fmt.Errorf("count %s: %w", t, err)
+		}
+		m.Rows[t] = n
+	}
 	latest := map[string]string{
 		"prices":        `SELECT COALESCE(MAX(date), '') FROM prices WHERE market = 'TW'`,
 		"benchmark":     `SELECT COALESCE(MAX(date), '') FROM prices WHERE market = 'TW' AND ticker = ?`,
@@ -189,7 +208,13 @@ func (m *Manifest) hard(q queryFunc, prev *Manifest, now time.Time) error {
 		m.Hard = append(m.Hard, Check{Name: "compared with previous snapshot", OK: true, Detail: "none yet"})
 		return nil
 	}
-	for _, t := range tables {
+	compare := append([]string{}, tables...)
+	for _, t := range optionalTables {
+		if _, ok := prev.Rows[t]; ok {
+			compare = append(compare, t)
+		}
+	}
+	for _, t := range compare {
 		was, cur := prev.Rows[t], m.Rows[t]
 		c := Check{Name: t + " rows not lost", OK: true, Detail: fmt.Sprintf("%d, was %d in %s", cur, was, prev.ID)}
 		if was > 0 && float64(was-cur)/float64(was) > maxRowDrop {
