@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/alerts"
 	"github.com/Antonio-1110/stocks_but_fr/internal/alpha"
 	"github.com/Antonio-1110/stocks_but_fr/internal/calendar"
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/health"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/margin"
@@ -63,7 +65,7 @@ var renderers = []step{
 func main() {
 	configPath := flag.String("config", "radar.toml", "path to the config file")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render|notify|review")
+		fmt.Fprintln(os.Stderr, "usage: radar [-config radar.toml] collect|validate|render|notify|review|health")
 	}
 	flag.Parse()
 	if flag.NArg() != 1 {
@@ -87,6 +89,9 @@ func main() {
 	case "review":
 		// Prints the monthly paper review (issue #75) as markdown on stdout.
 		steps = []step{{"review", paper.Review}}
+	case "health":
+		// Prints each collect step's latest run and each data table's newest date (issue #14).
+		steps = []step{{"health", health.Print}}
 	default:
 		flag.Usage()
 		os.Exit(2)
@@ -103,10 +108,18 @@ func main() {
 	defer st.Close()
 
 	ctx := context.Background()
+	runStarted := time.Now() // issue #14: one id for this run's source_runs rows
 	failed := 0
 	for _, s := range steps {
 		log.Printf("%s: starting", s.name)
-		if err := s.run(ctx, cfg, st); err != nil {
+		started := time.Now()
+		err := s.run(ctx, cfg, st)
+		if flag.Arg(0) == "collect" { // issue #14: record each source's outcome
+			if rerr := health.Record(st.DB, runStarted, s.name, started, err); rerr != nil {
+				log.Printf("%s: recording status: %v", s.name, rerr)
+			}
+		}
+		if err != nil {
 			log.Printf("%s: FAILED: %v", s.name, err)
 			failed++
 			continue

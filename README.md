@@ -71,6 +71,10 @@ request per exchange per trading day, last 10 days):
 
 `tw_dataset_fetches` records what has been fetched, so nothing is asked twice.
 
+Every `radar collect` step's outcome (ok or failed, seconds, error) is saved
+in `source_runs` (#14). `radar health` prints each step's latest run, how many
+runs in a row it has failed, and the newest date in each data table.
+
 ## Calendar
 
 `public/calendar.html` (linked from the dashboard) marks 法說會, ex-dividend
