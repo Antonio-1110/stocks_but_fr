@@ -47,6 +47,20 @@ market data never rewinds them. `radar` attaches it automatically. If
 `state.db.gz` goes missing the run stops rather than restarting the
 portfolios; rename `state.prev.db.gz` to restore it.
 
+## Taiwan daily datasets
+
+Besides prices, revenue and flows, `radar collect` keeps these per stock per
+trading day, each backfilled from FinMind (one request per ticker, from
+`history_start`, sharing the run's FinMind budget so it takes a few runs) and
+then kept current from the exchanges' own daily reports (TWSE and TPEx, one
+request per exchange per trading day, last 10 days):
+
+- `tw_margin` (#84): margin purchases (融資) and short sales (融券) in lots:
+  buys, sells and the balance left open, plus same-day offsets and the
+  exchange's flags (e.g. `X` short selling stopped).
+
+`tw_dataset_fetches` records what has been fetched, so nothing is asked twice.
+
 ## Calendar
 
 `public/calendar.html` (linked from the dashboard) marks 法說會, ex-dividend

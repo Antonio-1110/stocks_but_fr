@@ -15,6 +15,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/flows"
+	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/margin"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/us"
 	"github.com/Antonio-1110/stocks_but_fr/internal/paper"
@@ -37,6 +38,7 @@ var collectors = []step{
 	{"tw-master", tw.CollectMaster}, // listing dates and industry history; after prices (fallback dates)
 	{"tw-revenue", revenue.Collect}, // needs the TW universe in companies
 	{"tw-flows", flows.Collect},     // history needs the TW universe; daily reports don't
+	{"tw-margin", margin.Collect},   // issue #84: 融資融券, needs the TW universe and price days
 	{"tw-calendar", calendar.Collect},
 	{"us-prices", us.Collect}, // issue #2: US large caps, own tables
 	{"ratings", ratings.Run},  // issue #78: rate stocks, score past ratings; after both markets' prices
