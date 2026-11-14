@@ -283,6 +283,7 @@ details > summary:hover h2, details > summary:hover h3 { color: var(--yellow); }
   table.mini th, table.mini td, table.mini td.num { display: table-cell; padding: 4px 4px; border-bottom: 1px solid var(--line); }
   table.mini td.num { text-align: right; }
   table.mini thead th { border: 0; border-bottom: 1px solid var(--cyan); font-size: .6rem; }
+  table.mini th.w, table.mini td.num.w { display: none; } /* overview paper card: fewer columns (#87) */
 }
 
 @media (prefers-reduced-motion: reduce) {

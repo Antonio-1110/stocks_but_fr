@@ -26,6 +26,11 @@ type PaperCard struct {
 	HasBench      bool
 	Holdings      int
 	PendingOrders int
+	// Change on the latest day against the mark before it (issue #87).
+	HasDay      bool
+	Day         float64
+	HasBenchDay bool
+	BenchDay    float64
 }
 
 // UpcomingEvent is one calendar entry on the overview.
@@ -99,6 +104,20 @@ func loadPaper(db *sql.DB, names []string) ([]PaperCard, error) {
 		c.Return = liq/capital - 1
 		if bench.Valid {
 			c.HasBench, c.BenchReturn = true, bench.Float64/capital-1
+		}
+		var prevLiq float64
+		var prevBench sql.NullFloat64
+		err = db.QueryRow(`SELECT liquidation, bench FROM state.paper_equity
+			WHERE portfolio = ? AND date < ? ORDER BY date DESC LIMIT 1`, name, c.Date).Scan(&prevLiq, &prevBench)
+		switch {
+		case err == sql.ErrNoRows:
+		case err != nil:
+			return nil, err
+		case prevLiq > 0:
+			c.HasDay, c.Day = true, liq/prevLiq-1
+			if bench.Valid && prevBench.Valid && prevBench.Float64 > 0 {
+				c.HasBenchDay, c.BenchDay = true, bench.Float64/prevBench.Float64-1
+			}
 		}
 		if err := db.QueryRow(`SELECT COUNT(*) FROM state.paper_positions WHERE portfolio = ?`, name).Scan(&c.Holdings); err != nil {
 			return nil, err

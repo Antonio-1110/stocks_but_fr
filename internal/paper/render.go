@@ -55,6 +55,19 @@ type View struct {
 	Orders             []OrderRow
 	Chart              Chart
 	Last30             Compare // against the benchmark over the last 30 days (issue #75)
+	Today              Day     // change on the latest trading day (issue #87)
+	NewOrders          int     // orders filled on the latest trading day
+}
+
+// Day is a portfolio's and its benchmark's change from the previous trading
+// day's mark to the latest close (issue #87). OK is false on the first day.
+type Day struct {
+	OK          bool
+	Date        string // the latest trading day
+	Return      float64
+	Money       float64 // NTD gained or lost
+	HasBench    bool
+	BenchReturn float64
 }
 
 type Holding struct {
@@ -63,6 +76,9 @@ type Holding struct {
 	Cost, Value        float64
 	Return             float64 // after the costs of selling now
 	Weight             float64
+	Day                float64 // close-to-close change today, dividends included
+	HasDay             bool    // false for a stock bought today (Return covers it) or without a bar today
+	New                bool    // bought on the latest trading day
 }
 
 type OrderRow struct {
@@ -74,6 +90,7 @@ type OrderRow struct {
 	PnL                  float64
 	HasPnL               bool
 	Note                 string
+	New                  bool // filled on the latest trading day
 }
 
 // Chart is the equity curve: return since start, portfolio vs benchmark.
@@ -214,6 +231,8 @@ func view(db *sql.DB, m *market, b *book, costs config.TWCosts) (View, error) {
 		if e.holdings+e.cash > 0 {
 			h.Weight = val / (e.holdings + e.cash)
 		}
+		h.Day, h.HasDay = dayChange(m, p.Ticker, p.Opened)
+		h.New = p.Opened >= m.last()
 		v.Holdings = append(v.Holdings, h)
 	}
 
@@ -239,14 +258,61 @@ func view(db *sql.DB, m *market, b *book, costs config.TWCosts) (View, error) {
 		if o.Side == "sell" && o.Status == "filled" {
 			r.PnL, r.HasPnL = o.PnL, true
 		}
+		r.New = o.Status == "filled" && o.FillDate == m.last()
+		if r.New {
+			v.NewOrders++
+		}
 		v.Orders = append(v.Orders, r)
 	}
 
 	if v.Last30, err = last30(db, b.Name); err != nil {
 		return View{}, err
 	}
+	if v.Today, err = today(db, b.Name, m.last(), v.Value, v.Bench, v.HasBench); err != nil {
+		return View{}, err
+	}
 	v.Chart, err = chart(db, b)
 	return v, err
+}
+
+// dayChange is a held stock's close-to-close change on the latest trading
+// day, on the adjusted scale so an ex-dividend day isn't a fake drop. A stock
+// bought that day has none: its return since the fill says it all.
+func dayChange(m *market, ticker, opened string) (float64, bool) {
+	d := m.last()
+	if opened >= d {
+		return 0, false
+	}
+	cur, ok := m.on(ticker, d)
+	if !ok {
+		return 0, false
+	}
+	prev, ok := m.before(ticker, d)
+	if !ok || prev.adj <= 0 || cur.adj <= 0 {
+		return 0, false
+	}
+	return cur.adj/prev.adj - 1, true
+}
+
+// today compares the latest values with the newest stored mark before the
+// latest trading day (issue #87).
+func today(db *sql.DB, name, last string, value, bench float64, hasBench bool) (Day, error) {
+	var date string
+	var liq float64
+	var pb sql.NullFloat64
+	err := db.QueryRow(`SELECT date, liquidation, bench FROM paper_equity
+		WHERE portfolio = ? AND date < ? ORDER BY date DESC LIMIT 1`, name, last).Scan(&date, &liq, &pb)
+	if err == sql.ErrNoRows || (err == nil && liq <= 0) {
+		return Day{}, nil
+	}
+	if err != nil {
+		return Day{}, err
+	}
+	d := Day{OK: true, Date: last, Return: value/liq - 1, Money: value - liq}
+	if hasBench && pb.Valid && pb.Float64 > 0 {
+		d.HasBench, d.BenchReturn = true, bench/pb.Float64-1
+	}
+	return d, nil
 }
 
 func goodinfo(t string) string { return "https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=" + t }

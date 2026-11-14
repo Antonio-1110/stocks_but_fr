@@ -17,18 +17,19 @@
   <h2>Paper portfolios <a class="go" href="paper.html">all details &gt;</a></h2>
   {{if .Paper}}
   <table class="mini">
-    <thead><tr><th>Strategy</th><th class="num">Return</th><th class="num">0050</th><th class="num">Ahead</th><th class="num">Stocks</th></tr></thead>
+    <thead><tr><th>Strategy</th><th class="num" title="Change on the latest trading day">Today</th><th class="num">Return</th><th class="num w">0050</th><th class="num">Ahead</th><th class="num w">Stocks</th></tr></thead>
     <tbody>
     {{range .Paper}}<tr>
       <td><a href="paper-{{.Name}}.html">{{.Title}}</a></td>
+      <td class="num {{if .HasDay}}{{retSign .Day}}{{end}}">{{if .HasDay}}{{ret .Day}}{{else}}–{{end}}</td>
       <td class="num {{retSign .Return}}">{{ret .Return}}</td>
-      <td class="num {{if .HasBench}}{{retSign .BenchReturn}}{{end}}">{{if .HasBench}}{{ret .BenchReturn}}{{else}}–{{end}}</td>
+      <td class="num w {{if .HasBench}}{{retSign .BenchReturn}}{{end}}">{{if .HasBench}}{{ret .BenchReturn}}{{else}}–{{end}}</td>
       <td class="num {{if .HasBench}}{{retSign (sub .Return .BenchReturn)}}{{end}}">{{if .HasBench}}{{ret (sub .Return .BenchReturn)}}{{else}}–{{end}}</td>
-      <td class="num">{{.Holdings}}{{if .PendingOrders}} <span class="muted" title="orders waiting for the next open">+{{.PendingOrders}}</span>{{end}}</td>
+      <td class="num w">{{.Holdings}}{{if .PendingOrders}} <span class="muted" title="orders waiting for the next open">+{{.PendingOrders}}</span>{{end}}</td>
     </tr>{{end}}
     </tbody>
   </table>
-  <p class="muted note">Returns since each portfolio started, after fees and tax{{with index .Paper 0}}, as of {{.Date}}{{end}}. 0050 is the same money bought and held.</p>
+  <p class="muted note">Returns since each portfolio started, after fees and tax{{with index .Paper 0}}, as of {{.Date}}{{if .HasBenchDay}}; 0050 today <span class="{{retSign .BenchDay}}">{{ret .BenchDay}}</span>{{end}}{{end}}. 0050 is the same money bought and held.</p>
   {{else}}
   <p class="muted">No paper portfolio has started yet.</p>
   {{end}}

@@ -252,7 +252,12 @@ func TestOverviewCards(t *testing.T) {
 		!c.HasBench || c.Return < 0.0999 || c.Return > 0.1001 || c.BenchReturn < 0.0499 || c.BenchReturn > 0.0501 {
 		t.Errorf("cycle_bottom card = %+v", c)
 	}
-	if cards[1].Title != "New thing" || cards[1].HasBench {
+	// Issue #87: the day's change against the mark before it; no bench on
+	// the earlier mark, so no bench day.
+	if !c.HasDay || c.Day < 0.0999 || c.Day > 0.1001 || c.HasBenchDay {
+		t.Errorf("cycle_bottom day = %+v", c)
+	}
+	if cards[1].Title != "New thing" || cards[1].HasBench || cards[1].HasDay {
 		t.Errorf("new_thing card = %+v", cards[1])
 	}
 

@@ -49,6 +49,8 @@
 .book details { margin-top: 12px; }
 .book details > summary h3 { margin: 0; }
 .behind { margin-left: 6px; padding: 0 5px; border: 1px solid var(--yellow); color: var(--yellow); font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.new { margin-left: 6px; padding: 0 5px; color: var(--bg); background: var(--cyan); font: .62rem var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.book tr.filled:has(.new) td { background: rgba(0, 240, 255, 0.05); }
 .costline { font-size: .78rem; margin: -4px 0 12px; }
 .board td a { font-family: var(--cjk), var(--mono); }
 .board thead th { cursor: default; position: static; }
@@ -77,7 +79,8 @@
   .board th, .board td, .board td.num { display: table-cell; padding: 4px; border-bottom: 1px solid var(--line); }
   .board td.num { text-align: right; }
   .board thead th { border: 0; border-bottom: 1px solid var(--cyan); font-size: .6rem; }
-  .board .w { display: none; }
+  /* Must beat ".board td.num" above, or the columns stay and overflow (#87). */
+  .board th.w, .board td.num.w { display: none; }
   .picker { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .picker a { white-space: nowrap; flex: none; }
 }
@@ -111,20 +114,21 @@
 <section class="panel board">
   <h2>Scoreboard</h2>
   <table>
-    <thead><tr><th>Strategy</th><th class="num w">Value</th><th class="num">Return</th><th class="num">{{.Benchmark}}</th><th class="num">Ahead</th><th class="num">30 days vs {{.Benchmark}}</th><th class="num w">Stocks</th></tr></thead>
+    <thead><tr><th>Strategy</th><th class="num w">Value</th><th class="num">Return</th><th class="num" title="Change on the latest trading day{{with .Portfolios}}{{with index . 0}}{{if .Today.OK}}, {{.Today.Date}}{{end}}{{end}}{{end}}">Today</th><th class="num w">{{.Benchmark}}</th><th class="num w">Ahead</th><th class="num">30 days vs {{.Benchmark}}</th><th class="num w">Stocks</th></tr></thead>
     <tbody>
     {{range .Portfolios}}<tr data-href="{{page .Name}}">
       <td><a href="{{page .Name}}">{{.Title}}</a>{{if .Last30.Behind}}<span class="behind" title="Behind {{$.Benchmark}} over the last 30 days">behind</span>{{end}}</td>
       <td class="num w">{{ntd .Value}}</td>
       <td class="num {{sign .Return}}">{{pct .Return}}</td>
-      <td class="num {{if .HasBench}}{{sign .BenchReturn}}{{end}}">{{if .HasBench}}{{pct .BenchReturn}}{{else}}–{{end}}</td>
-      <td class="num {{if .HasBench}}{{sign (diff .Value .Bench)}}{{end}}">{{if .HasBench}}{{money (diff .Value .Bench)}}{{else}}–{{end}}</td>
+      <td class="num {{if .Today.OK}}{{sign .Today.Return}}{{end}}"{{if .Today.HasBench}} title="{{$.Benchmark}} {{pct .Today.BenchReturn}}"{{end}}>{{if .Today.OK}}{{pct .Today.Return}}{{else}}–{{end}}</td>
+      <td class="num w {{if .HasBench}}{{sign .BenchReturn}}{{end}}">{{if .HasBench}}{{pct .BenchReturn}}{{else}}–{{end}}</td>
+      <td class="num w {{if .HasBench}}{{sign (diff .Value .Bench)}}{{end}}">{{if .HasBench}}{{money (diff .Value .Bench)}}{{else}}–{{end}}</td>
       <td class="num {{if .Last30.OK}}{{sign .Last30.Gap}}{{end}}">{{template "gap" .Last30}}</td>
       <td class="num w">{{len .Holdings}}</td>
     </tr>{{end}}
     </tbody>
   </table>
-  <p class="muted note">Tap a strategy to open its own page: its chart, holdings and orders.</p>
+  <p class="muted note">Tap a strategy to open its own page: its chart, holdings and orders.{{with .Portfolios}}{{with index . 0}}{{if .Today.HasBench}} {{$.Benchmark}} today: <span class="{{sign .Today.BenchReturn}}">{{pct .Today.BenchReturn}}</span>.{{end}}{{end}}{{end}}</p>
   <details>
     <summary><h3>How this works</h3></summary>
     <p class="muted rules">Each strategy runs forward on live data from the day it started, with no real money. It decides on a trading day's close and fills at the next day's open, paying commission at {{rate .Costs.CommissionRate}} × {{.Costs.BrokerDiscount}} (minimum NT${{ntd .Costs.MinCommission}}) and {{rate .Costs.SellTax}} sell tax ({{rate .Costs.ETFSellTax}} on ETFs), from radar.toml. Dividends are reinvested in the same stock. Values are what you would have after selling everything at the last close, fees and tax included. {{.Benchmark}} is the same starting money bought on the first fill day and held. "30 days vs {{.Benchmark}}" is the portfolio's return over the last 30 days minus {{.Benchmark}}'s, in percentage points; a portfolio younger than that is measured from its start (marked *). Each month, any strategy behind {{.Benchmark}} gets reviewed: improved, or proposed for retirement.</p>
@@ -138,6 +142,7 @@
   <dl class="tiles">
     <div class="tile"><dt>Value after costs</dt><dd>NT${{ntd .Value}}<small class="{{sign .Return}}">{{pct .Return}}</small></dd></div>
     <div class="tile"><dt>{{$.Benchmark}} same money</dt><dd>{{if .HasBench}}NT${{ntd .Bench}}<small class="{{sign .BenchReturn}}">{{pct .BenchReturn}}</small>{{else}}<span class="muted">buys at next open</span>{{end}}</dd></div>
+    <div class="tile"><dt>Today{{if .Today.OK}} <span class="muted">{{.Today.Date}}</span>{{end}}</dt><dd>{{if .Today.OK}}<span class="{{sign .Today.Return}}">{{pct .Today.Return}}</span><small>{{money .Today.Money}}{{if .Today.HasBench}} · {{$.Benchmark}} {{pct .Today.BenchReturn}}{{end}}</small>{{else}}<span class="muted">–</span><small>first day</small>{{end}}</dd></div>
     <div class="tile"><dt>Last 30 days{{if .Last30.Behind}}<span class="behind">behind</span>{{end}}</dt><dd>{{if .Last30.OK}}<span class="{{sign .Last30.Return}}">{{pct .Last30.Return}}</span><small>{{$.Benchmark}} {{pct .Last30.BenchReturn}}{{if .Last30.Partial}}, since {{.Last30.From}}{{end}}</small>{{else}}<span class="muted">–</span>{{end}}</dd></div>
     <div class="tile"><dt>Ahead of {{$.Benchmark}}</dt><dd>{{if .HasBench}}<span class="{{sign (diff .Value .Bench)}}">{{money (diff .Value .Bench)}}</span>{{else}}<span class="muted">–</span>{{end}}</dd></div>
   </dl>
@@ -168,13 +173,14 @@
   <summary><h3>Holdings <span class="count">{{len .Holdings}}</span></h3></summary>
   {{if .Holdings}}
   <table>
-    <thead><tr><th>Stock</th><th>Since</th><th>Cost</th><th>Value</th><th>Return after costs</th><th>Weight</th></tr></thead>
+    <thead><tr><th>Stock</th><th>Since</th><th>Cost</th><th>Value</th><th title="Close-to-close change on the latest trading day">Today</th><th>Return after costs</th><th>Weight</th></tr></thead>
     <tbody>
     {{range .Holdings}}<tr>
-      <td class="co"><a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a></td>
+      <td class="co"><a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a>{{if .New}}<span class="new" title="Bought on the latest trading day">new</span>{{end}}</td>
       <td class="num" data-label="Since">{{.Opened}}</td>
       <td class="num" data-label="Cost">{{ntd .Cost}}</td>
       <td class="num" data-label="Value">{{ntd .Value}}</td>
+      <td class="num {{if .HasDay}}{{sign .Day}}{{end}}" data-label="Today">{{if .HasDay}}{{pct .Day}}{{else}}–{{end}}</td>
       <td class="num {{sign .Return}}" data-label="Return">{{pct .Return}}</td>
       <td class="num" data-label="Weight">{{pct0 .Weight}}</td>
     </tr>{{end}}
@@ -183,14 +189,14 @@
   {{else}}<p class="muted">All cash.</p>{{end}}
   </details>
 
-  <details>
-  <summary><h3>Orders <span class="count">{{len .Orders}}</span></h3></summary>
+  <details{{if .NewOrders}} open{{end}}>
+  <summary><h3>Orders <span class="count">{{len .Orders}}</span>{{if .NewOrders}} <span class="new">{{.NewOrders}} new today</span>{{end}}</h3></summary>
   {{if .Orders}}
   <table>
     <thead><tr><th>Stock</th><th>Side</th><th>Signal</th><th>Filled</th><th>Price</th><th>NTD</th><th>Fee+tax</th><th>P/L</th><th>Why</th></tr></thead>
     <tbody>
     {{range .Orders}}<tr class="{{.Status}}">
-      <td class="co"><a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a></td>
+      <td class="co"><a href="{{.Link}}" target="_blank" rel="noopener"><b>{{.Ticker}}</b>{{.Name}}</a>{{if .New}}<span class="new" title="Filled on the latest trading day">new</span>{{end}}</td>
       <td class="num side-{{.Side}}" data-label="Side">{{.Side}}</td>
       <td class="num" data-label="Signal">{{.SignalDate}}</td>
       <td class="num" data-label="Filled">{{if eq .Status "filled"}}{{.FillDate}}{{else}}<span class="st">{{.Status}}</span>{{end}}</td>

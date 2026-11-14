@@ -45,6 +45,15 @@ func TestRenderWritesAPagePerPortfolio(t *testing.T) {
 			t.Errorf("%s missing %q", PageFile("test"), want)
 		}
 	}
+	// Issue #87: the day's change, and the stock bought today marked new.
+	for _, want := range []string{"<dt>Today", `title="Bought on the latest trading day">new</span>`, "1 new today"} {
+		if !strings.Contains(own, want) {
+			t.Errorf("%s missing %q", PageFile("test"), want)
+		}
+	}
+	if !strings.Contains(board, ">Today</th>") {
+		t.Error("paper.html missing the Today column")
+	}
 	if strings.Contains(own, "Scoreboard</h2>") {
 		t.Errorf("%s should not repeat the scoreboard", PageFile("test"))
 	}
