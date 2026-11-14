@@ -45,7 +45,7 @@ b { font-weight: 600; }
 .up { color: var(--up); text-shadow: 0 0 6px rgba(255, 59, 107, 0.45); }
 .down { color: var(--down); text-shadow: 0 0 6px rgba(43, 255, 136, 0.35); }
 
-/* Nav bar: the same five links on every page. */
+/* Nav bar: the same links on every page. */
 .topnav {
   position: sticky; top: 0; z-index: 20; height: var(--navh); margin: 0 calc(-1 * clamp(10px, 2vw, 28px));
   padding: 0 clamp(10px, 2vw, 28px); display: flex; align-items: center; gap: 4px;
@@ -182,6 +182,7 @@ td.lbval { text-decoration: underline dotted var(--yellow); text-underline-offse
 .ind { color: var(--muted); font-family: var(--cjk); font-size: .85rem; }
 
 footer { margin-top: 24px; font-size: .78rem; }
+.ind-m { display: none; } /* phones show the industry inside the company cell (#86) */
 
 /* Screener: secondary columns stay hidden until "more columns" is ticked, and
    only the first rows show until "show more". */
@@ -252,20 +253,26 @@ details > summary:hover h2, details > summary:hover h3 { color: var(--yellow); }
     font-size: .6rem;
   }
   tbody tr {
-    display: grid; grid-template-columns: 2.2em repeat(3, minmax(0, 1fr)); gap: 2px 8px;
-    padding: 8px 2px; border-bottom: 1px solid var(--panel-edge);
+    display: grid; grid-template-columns: 2.2em repeat(4, minmax(0, 1fr)); gap: 2px 8px;
+    padding: 6px 2px; border-bottom: 1px solid var(--panel-edge);
   }
   tbody td, tbody td.num { border: 0; padding: 0; text-align: left; }
   td.rank { grid-row: span 5; padding-top: 2px; }
   td.co { grid-column: 2 / -1; min-width: 0; }
   td.ind { grid-column: 2 / -1; font-size: .78rem; }
+  /* Shorter company cards (#86): the name already links to Goodinfo, and the
+     industry rides next to it instead of taking its own line. */
+  .co .links, td.ind.mob-hide { display: none; }
+  .co .ind-m { display: inline; margin-left: 6px; color: var(--muted); font: .74rem var(--cjk); }
   td[data-label].num::before {
     content: attr(data-label); display: block; color: var(--muted); font-size: .62rem;
     text-transform: uppercase; letter-spacing: .04em; text-shadow: none;
   }
   td.ind[data-label]::before { content: none; }
-  .topnav { justify-content: space-between; gap: 0; }
-  .topnav a { padding: 8px 5px; font-size: .58rem; letter-spacing: .03em; }
+  /* Every page one tap away (#86): the links wrap into a 4 x 2 grid. */
+  :root { --navh: 64px; }
+  .topnav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding-top: 3px; padding-bottom: 3px; overflow: visible; }
+  .topnav a { padding: 7px 2px; font-size: .6rem; letter-spacing: .04em; text-align: center; }
   .topnav .brand { display: none; }
   thead { top: var(--navh); }
   /* Overview tables are short: keep them tables. */
