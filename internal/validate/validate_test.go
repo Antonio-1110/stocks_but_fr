@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/health"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
@@ -196,5 +197,35 @@ func TestHealthPage(t *testing.T) {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("page lacks %q", want)
 		}
+	}
+}
+
+// Issue #90: the Sources strip lists failed collect steps first, with their
+// streak, from source_runs.
+func TestHealthPageSources(t *testing.T) {
+	st, cfg := open(t)
+	dir := t.TempDir()
+	r1 := time.Date(2026, 10, 1, 22, 0, 0, 0, time.UTC)
+	r2 := r1.Add(24 * time.Hour)
+	for _, r := range []time.Time{r1, r2} {
+		if err := health.Record(st.DB, r, "tw-prices", r, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := health.Record(st.DB, r, "tw-margin", r, errors.New("HTTP 403")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderHealth(st.DB, cfg, dir, day); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "health.html"))
+	body := string(b)
+	for _, want := range []string{"1 failing", "<b>tw-margin</b>", "failed 2× in a row", "last ok never", "HTTP 403", "<b>tw-prices</b>", "Data tables"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if strings.Index(body, "<b>tw-margin</b>") > strings.Index(body, "<b>tw-prices</b>") {
+		t.Error("failed steps should come first")
 	}
 }

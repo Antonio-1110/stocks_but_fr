@@ -38,6 +38,29 @@ type UpcomingEvent struct {
 	Date, Kind, Ticker, Name, Title string
 }
 
+// failedSources are the collect steps that failed in the newest recorded
+// run (issue #90, from #14's source_runs); nil before the first run.
+func failedSources(db *sql.DB) ([]string, error) {
+	if ok, err := tableExists(db, "source_runs"); err != nil || !ok {
+		return nil, err
+	}
+	rows, err := db.Query(`SELECT step FROM source_runs
+		WHERE ok = 0 AND run_started = (SELECT MAX(run_started) FROM source_runs) ORDER BY step`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // HealthCard is the latest data snapshot's verdict.
 type HealthCard struct {
 	Stamp      string

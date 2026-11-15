@@ -22,6 +22,14 @@
 .health td.n { text-align: right; white-space: nowrap; }
 .health td.d { color: var(--muted); overflow-wrap: anywhere; }
 .health thead th { cursor: default; }
+/* Sources strip (#90): one chip per collect step, failures first and wide. */
+.steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.steps li { border-left: 2px solid var(--down); background: rgba(43, 255, 136, 0.05); padding: 5px 8px; min-width: 0; }
+.steps li.s-bad { grid-column: 1 / -1; border-left-color: var(--up); background: rgba(255, 59, 107, 0.08); }
+.steps b { display: block; font-weight: normal; color: var(--fg); }
+.steps small { color: var(--muted); font-size: .72rem; }
+.steps .err { display: block; overflow-wrap: anywhere; color: var(--muted); }
+.health h2 .ok, .health h2 .bad { font: .8rem var(--mono); letter-spacing: 0; text-transform: none; }
 /* The shared stylesheet turns tables into cards on phones; these are small, keep them tables. */
 @media (max-width: 720px) {
   .health table { display: table; }
@@ -54,6 +62,33 @@
 </header>
 
 <main>
+{{if .Steps}}
+<section class="panel health" id="sources">
+  <h2>Sources {{if .StepsFailed}}<span class="bad">{{.StepsFailed}} failing</span>{{else}}<span class="ok">all ok</span>{{end}}</h2>
+  <p class="muted note">Each <code>radar collect</code> step's latest run. A failed step is skipped and the rest of the run goes on, so a blocked source shows up here rather than as quietly missing data.</p>
+  <ul class="steps">
+    {{range .Steps}}<li class="{{if .OK}}s-ok{{else}}s-bad{{end}}"{{if .Error}} title="{{.Error}}"{{end}}>
+      <b>{{.Step}}</b>
+      {{if .OK}}<span class="ok">ok</span> <small>{{secs .Seconds}}</small>{{else}}<span class="bad">failed{{if gt .FailStreak 1}} {{.FailStreak}}× in a row{{end}}</span>
+      <small>last ok {{if .LastOK}}{{stamp .LastOK}}{{else}}never{{end}}</small>
+      {{if .Error}}<small class="err">{{.Error}}</small>{{end}}{{end}}
+    </li>{{end}}
+  </ul>
+  <p class="muted note">Latest run {{with index .Steps 0}}{{stamp .LastRun}}{{end}}.</p>
+  {{if .Tables}}
+  <details>
+  <summary><h3>Data tables</h3></summary>
+  <table>
+    <thead><tr><th>Table</th><th>Newest</th><th>Rows</th></tr></thead>
+    <tbody>
+    {{range .Tables}}<tr><td>{{.Table}}</td><td>{{if .Latest}}{{.Latest}}{{else}}<span class="muted">not collected yet</span>{{end}}</td><td class="n">{{num .Rows}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </details>
+  {{end}}
+</section>
+{{end}}
 {{with .Latest}}
 <section class="panel health">
   <h2>Latest snapshot</h2>

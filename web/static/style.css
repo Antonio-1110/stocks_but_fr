@@ -214,6 +214,8 @@ table.mini td a b { color: var(--cyan); font-family: var(--mono); }
 .facts div { border-left: 2px solid var(--violet); background: rgba(185, 103, 255, 0.06); padding: 6px 8px; min-width: 0; }
 .facts dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
 .facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.alert { margin-bottom: 0; color: var(--fg); border-color: var(--up); box-shadow: inset 0 0 30px rgba(255, 59, 107, 0.12); }
+.alert b { color: var(--up); font-weight: normal; }
 .ok { color: var(--down); }
 .bad { color: var(--up); }
 .warn { color: var(--yellow); }

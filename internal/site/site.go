@@ -41,6 +41,7 @@ type Page struct {
 	UpcomingTotal int
 	UpcomingDays  int
 	Health        *HealthCard
+	FailedSources []string // collect steps that failed in the latest run (#90)
 }
 
 // Render is the `radar render` step: it writes index.html (the overview),
@@ -77,6 +78,9 @@ func render(st *store.Store, dir string, now time.Time, lb config.LowBase, u con
 	}
 	if page.Upcoming, page.UpcomingTotal, err = loadUpcoming(st.DB, model.MarketTW, now); err != nil {
 		return fmt.Errorf("upcoming events: %w", err)
+	}
+	if page.FailedSources, err = failedSources(st.DB); err != nil {
+		return fmt.Errorf("source status: %w", err)
 	}
 	if page.Health, err = loadHealth(st.DB); err != nil {
 		return fmt.Errorf("health summary: %w", err)

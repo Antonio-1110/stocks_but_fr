@@ -267,6 +267,17 @@ func TestOverviewCards(t *testing.T) {
 		t.Errorf("upcoming = %+v (total %d), want only 2330 (ETF and later events left out)", evs, total)
 	}
 
+	// Issue #90: only the newest run's failures count.
+	_, err = st.DB.Exec(`CREATE TABLE source_runs (run_started TEXT, step TEXT, ok INTEGER, seconds REAL, error TEXT);
+		INSERT INTO source_runs VALUES ('2026-10-01T22:00:00Z', 'tw-flows', 0, 1, 'x'),
+			('2026-10-02T22:00:00Z', 'tw-flows', 1, 1, ''), ('2026-10-02T22:00:00Z', 'tw-margin', 0, 1, 'x');`)
+	must(t, err)
+	failed, err := failedSources(st.DB)
+	must(t, err)
+	if len(failed) != 1 || failed[0] != "tw-margin" {
+		t.Errorf("failed sources = %v, want [tw-margin]", failed)
+	}
+
 	h, err := loadHealth(st.DB)
 	must(t, err)
 	if h == nil || h.HardFailed != 0 || h.SoftFailed != 1 || h.Prices != "2026-10-08" || h.Stamp != "2026-10-09 09:00" {

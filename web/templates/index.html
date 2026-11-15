@@ -13,6 +13,7 @@
 </header>
 
 <main class="cards">
+{{if .FailedSources}}<p class="panel wide alert">Latest data run: <b>{{len .FailedSources}} source{{if gt (len .FailedSources) 1}}s{{end}} failed</b> ({{join .FailedSources ", "}}). The rest of the data updated. <a href="health.html#sources">Details &gt;</a></p>{{end}}
 <section class="panel card wide">
   <h2>Paper portfolios <a class="go" href="paper.html">all details &gt;</a></h2>
   {{if .Paper}}
@@ -88,6 +89,7 @@
     <div><dt>Soft checks</dt><dd>{{if eq .SoftFailed 0}}<span class="ok">all clear</span>{{else}}<span class="warn">{{.SoftFailed}} to look at</span>{{end}}</dd></div>
     <div><dt>Prices to</dt><dd>{{or .Prices "–"}}</dd></div>
     <div><dt>Snapshot</dt><dd>{{.Stamp}}</dd></div>
+    {{if $.FailedSources}}<div><dt>Sources</dt><dd><span class="bad">{{len $.FailedSources}} failed</span></dd></div>{{end}}
   </dl>
   {{else}}<p class="muted">No validated snapshot yet.</p>{{end}}
 </section>

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Antonio-1110/stocks_but_fr/internal/config"
+	"github.com/Antonio-1110/stocks_but_fr/internal/health"
 	"github.com/Antonio-1110/stocks_but_fr/internal/store"
 )
 
@@ -30,6 +31,12 @@ type HealthPage struct {
 	Latest      *Manifest // nil before the first validated run
 	MinCoverage float64
 	History     []Manifest // newest first
+
+	// Collect steps' latest outcomes, failed first, and data tables'
+	// freshness (issue #90, from #14's source_runs).
+	Steps       []health.StepStatus
+	StepsFailed int
+	Tables      []health.Freshness
 }
 
 // Render is the `radar render` step that writes public/health.html.
@@ -50,6 +57,24 @@ func renderHealth(db *sql.DB, cfg config.Config, dir string, now time.Time) erro
 	if len(hist) > 0 {
 		page.Latest = &hist[0]
 	}
+	steps, err := health.Steps(db)
+	if err != nil {
+		return fmt.Errorf("source status: %w", err)
+	}
+	for _, s := range steps { // failed first, each group in step order
+		if !s.OK {
+			page.Steps = append(page.Steps, s)
+			page.StepsFailed++
+		}
+	}
+	for _, s := range steps {
+		if s.OK {
+			page.Steps = append(page.Steps, s)
+		}
+	}
+	if page.Tables, err = health.Tables(db); err != nil {
+		return fmt.Errorf("table freshness: %w", err)
+	}
 
 	funcs := template.FuncMap{
 		"pct": func(f float64) string { return fmt.Sprintf("%.0f%%", f*100) },
@@ -59,6 +84,12 @@ func renderHealth(db *sql.DB, cfg config.Config, dir string, now time.Time) erro
 				return s[:7]
 			}
 			return s
+		},
+		"secs": func(f float64) string {
+			if f < 60 {
+				return fmt.Sprintf("%.0fs", f)
+			}
+			return fmt.Sprintf("%.0fm", f/60)
 		},
 		"stamp": func(id string) string {
 			t, err := time.Parse(time.RFC3339, id)
