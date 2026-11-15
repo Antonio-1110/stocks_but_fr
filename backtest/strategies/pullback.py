@@ -54,6 +54,7 @@ def _frames(md, p) -> dict:
         "strength": filled / filled.shift(st) - 1,
         "exit_ma": adj.rolling(ex, min_periods=ex).mean(),
         "rsi": rsi(adj, int(p["rsi_days"])),
+        "high": filled.rolling(int(p["high_days"]), min_periods=int(0.8 * int(p["high_days"]))).max(),
     }
 
 
@@ -71,11 +72,16 @@ class Pullback(swing.Swing):
         "exit_ma_days": 5,
         "max_hold_days": 10,
         "stop_loss": 0.10,
+        "high_days": 250,        # issue #83: only buy within max_below_high of the
+        "max_below_high": 0.0,   # high_days closing high (0 = off)
+        "regime_ticker": "0050", # no new buys while this closes below its
+        "regime_days": 0,        # regime_days average (0 = off)
     }
 
     def _f(self, md) -> dict:
         p = self.p
-        key = f"pullback:{p['trend_days']}:{p['strength_days']}:{p['exit_ma_days']}:{p['rsi_days']}"
+        key = (f"pullback:{p['trend_days']}:{p['strength_days']}:{p['exit_ma_days']}:{p['rsi_days']}"
+               f":{p['high_days']}")
         return swing.panel(md, key, lambda m: _frames(m, p))
 
     def orders(self, view, book: Book) -> list[Order]:
@@ -96,7 +102,7 @@ class Pullback(swing.Swing):
                 out.append(Order(t, "sell", 0.0, "time"))
 
         free = self.free(book, selling=len(out))
-        if free <= 0:
+        if free <= 0 or not self._market_ok(md, day):
             return out
         liquid = self.liquid(view)
         if not liquid:
@@ -109,9 +115,24 @@ class Pullback(swing.Swing):
         trend = f["trend"].loc[day, cands]
         r = f["rsi"].loc[day, cands]
         ok = (today[cands] > trend) & (r < p["entry_rsi"])
+        if p["max_below_high"] > 0:
+            ok &= today[cands] >= f["high"].loc[day, cands] * (1 - p["max_below_high"])
         for t in r[ok].sort_values(kind="stable").index[:free]:
             out.append(Order(t, "buy", self.slot(book), "entry"))
         return out
+
+
+    def _market_ok(self, md, day) -> bool:
+        n = int(self.p["regime_days"])
+        if n <= 0:
+            return True
+        t = self.p["regime_ticker"]
+
+        def build(m):
+            px = m.adj_close[t].ffill()
+            return px > px.rolling(n, min_periods=n).mean()
+        ok = swing.panel(md, f"regime:{t}:{n}", build)
+        return bool(ok.get(day, False))
 
 
 def make(params: dict, settings) -> Pullback:

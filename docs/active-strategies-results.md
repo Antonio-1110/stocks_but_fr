@@ -40,3 +40,20 @@ money in paper too, mostly to fees and tax.
 
 Re-run one from `backtest/`: `python3 -m strategies.record_revenue` (or `breakout`,
 `window_dressing`, `pullback`).
+
+## Pullback: cutting the fees (issue #83, 2026-11-15)
+
+Snapshot 2026-11-14T17:11:50Z. Same engine; 0050 made 11.9% (2012–2019) and 26.9% (2020 on).
+
+| Variant | 2012–19 CAGR | Max drop | 2020+ CAGR | Max drop | Trades a year | Fees + tax a year |
+|---|---|---|---|---|---|---|
+| Before (RSI(2) < 10) | 11.4% | −53.6% | −6.9% | −58.8% | 507 / 530 | 24.2% / 24.9% |
+| **RSI(2) < 5 (now live)** | **16.7%** | −24.0% | **−5.3%** | −56.9% | 352 / 401 | 16.9% / 18.7% |
+| Within 10% of the 52-week high | 12.6% | −20.2% | −4.9% | −44.7% | 336 / 253 | 15.9% / 11.9% |
+| Only while 0050 is above its 200-day average | 5.6% | −53.5% | −4.1% | −38.7% | 410 / 434 | 19.7% / 20.3% |
+| RSI < 5 + near high + 10-day exit + trend filter | 5.4% | −16.7% | 3.1% | −16.5% | 116 / 68 | 5.5% / 3.2% |
+
+Only RSI(2) < 5 is better than the old rule in both periods, so it is the one change
+made (`entry_rsi = 5`). The new `max_below_high` and `regime_days` settings stay off.
+No version comes close to 0050 since 2020: in this market the bounce after a sharp
+dip in a leader is smaller than a round trip of fees and tax.
