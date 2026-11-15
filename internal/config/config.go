@@ -129,6 +129,7 @@ type Strategy struct {
 	Breakout        Breakout        `toml:"breakout"`
 	WindowDressing  WindowDressing  `toml:"window_dressing"`
 	Pullback        Pullback        `toml:"pullback"`
+	NearHigh        NearHigh        `toml:"near_high"`
 }
 
 // RevenueMomentum is [strategy.revenue_momentum]; see backtest/strategies/revenue_momentum.py.
@@ -222,6 +223,20 @@ type WindowDressing struct {
 	ADVDays      int     `toml:"adv_days"`
 	SkipLargest  int     `toml:"skip_largest"`
 	StopLoss     float64 `toml:"stop_loss"`
+}
+
+// NearHigh is [strategy.near_high]; see backtest/strategies/near_high.py (issue #92).
+type NearHigh struct {
+	MaxPositions  int     `toml:"max_positions"`
+	ExitRank      int     `toml:"exit_rank"`
+	RebalanceDays int     `toml:"rebalance_days"`
+	HighDays      int     `toml:"high_days"`
+	RevenueWeight float64 `toml:"revenue_weight"`
+	MinADVNTD     float64 `toml:"min_adv_ntd"`
+	ADVDays       int     `toml:"adv_days"`
+	MinPrice      float64 `toml:"min_price"`
+	MinBaseNTD    float64 `toml:"min_base_ntd"`
+	StopLoss      float64 `toml:"stop_loss"`
 }
 
 // Pullback is [strategy.pullback]; see backtest/strategies/pullback.py (issue #73).
@@ -335,11 +350,13 @@ func Default() Config {
 				MaxPositions: 10, MinADVNTD: 20_000_000, ADVDays: 20, SkipLargest: 100, StopLoss: 0.10},
 			Pullback: Pullback{MaxPositions: 10, MinADVNTD: 30_000_000, ADVDays: 20, TrendDays: 200, StrengthDays: 120,
 				StrengthPct: 0.2, RSIDays: 2, EntryRSI: 5, ExitMADays: 5, MaxHoldDays: 10, StopLoss: 0.10},
+			NearHigh: NearHigh{MaxPositions: 10, ExitRank: 30, RebalanceDays: 5, HighDays: 250, RevenueWeight: 0.5,
+				MinADVNTD: 30_000_000, ADVDays: 20, MinPrice: 10, MinBaseNTD: 10_000_000, StopLoss: 0.10},
 		},
 		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
 		Paper: Paper{
 			Strategies: []string{"revenue_momentum", "cycle_bottom", "revenue_momentum_foreign",
-				"record_revenue", "breakout", "window_dressing", "pullback"},
+				"record_revenue", "breakout", "window_dressing", "pullback", "near_high"},
 			InitialCapital: 5_000_000,
 			Benchmark:      "0050",
 			MinCoverage:    0.9,

@@ -267,3 +267,47 @@ func TestRecordRevenueBuysRecordsAndSellsOnTime(t *testing.T) {
 		t.Errorf("sold %q, want %q (20 trading days after the fill)", sold, want)
 	}
 }
+
+func TestNearHighRanksHighsWithRevenueAndTrails(t *testing.T) {
+	var rising, falling []float64
+	for i := 0; i < 40; i++ {
+		rising = append(rising, 100*math.Pow(1.002, float64(i)))
+		falling = append(falling, 200-0.5*float64(i))
+	}
+	drop := append([]float64{}, rising[:34]...)
+	drop = append(drop, rising[33]*0.85, rising[33]*0.85)
+	m, b := synthetic(t, map[string][]float64{"2001": drop, "2002": rising, "2003": falling}, nil)
+	for tk, y := range map[string]float64{"2001": 60, "2002": 5, "2003": 90} {
+		_, err := m.db.Exec(`INSERT INTO monthly_revenue (market, ticker, month, revenue, yoy_pct, announced_on)
+			VALUES ('TW', ?, '2025-12-01', 5e8, ?, '2026-01-10')`, tk, y)
+		must(t, err)
+	}
+	s := nearHigh{config.NearHigh{MaxPositions: 1, ExitRank: 1, RebalanceDays: 5, HighDays: 20, RevenueWeight: 0.5,
+		MinADVNTD: 1e6, ADVDays: 5, MinPrice: 10, MinBaseNTD: 1e7, StopLoss: 0.10}, m.db}
+	mi := until(m, 30)
+	out, err := s.decide(mi, b, fresh(mi, b))
+	must(t, err)
+	// 2001 and 2002 tie at their highs; 2001's revenue grows faster. 2003 grows
+	// fastest but is far below its high.
+	if got := tickers(out); got != "buy:2001" {
+		t.Fatalf("first ranking: %q, want buy:2001", got)
+	}
+	b.pos["2001"] = &position{Ticker: "2001", Opened: m.dates[31], Shares: 1000, Cost: 100_000, Gross: 100_000}
+	mi = until(m, 32)
+	if out, err = s.decide(mi, b, fresh(mi, b)); err != nil || len(out) != 0 {
+		t.Fatalf("between rankings: %q %v, want nothing", tickers(out), err)
+	}
+	mi = until(m, 34)
+	out, err = s.decide(mi, b, fresh(mi, b))
+	must(t, err)
+	if got := tickers(out); got != "sell:2001" || !strings.Contains(out[0].Reason, "trailing stop") {
+		t.Errorf("after a 15%% drop: %q, want the trailing stop", got)
+	}
+}
+
+func TestPctRankAveragesTies(t *testing.T) {
+	r := pctRank([]ranked{{"a", 1}, {"b", 2}, {"c", 2}, {"d", 3}})
+	if r["a"] != 0.25 || r["b"] != 0.625 || r["c"] != 0.625 || r["d"] != 1 {
+		t.Errorf("pctRank = %v", r)
+	}
+}

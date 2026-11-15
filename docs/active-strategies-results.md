@@ -57,3 +57,28 @@ Only RSI(2) < 5 is better than the old rule in both periods, so it is the one ch
 made (`entry_rsi = 5`). The new `max_below_high` and `regime_days` settings stay off.
 No version comes close to 0050 since 2020: in this market the bounce after a sharp
 dip in a leader is smaller than a round trip of fees and tax.
+
+## 52-week high + revenue growth (issue #92, 2026-11-15)
+
+Built on the alpha lab's best signal (#82). Every 5 trading days, rank liquid stocks
+by the average of two percentile ranks, closeness to the 52-week closing high and
+latest monthly revenue YoY; hold the top 10, keep a holding while it ranks in the
+top 30, and sell between rankings 10% below the high since bought. Rules in
+`backtest/strategies/near_high.py`; paper portfolio from the 2026-11-16 run.
+Snapshot 2026-11-14T17:11:50Z; 0050 made 11.9% (2012–2019) and 26.9% (2020 on).
+
+| Version | 2012–19 CAGR | Max drop | 2020+ CAGR | Max drop | Trades a year | Avg trade | Fees + tax a year |
+|---|---|---|---|---|---|---|---|
+| **Closeness + revenue YoY (live)** | **17.1%** | −34.6% | **41.7%** | −35.4% | 143 / 185 | +1.3% / +2.3% | 6.7% / 8.5% |
+| Closeness only | 10.5% | −25.7% | 29.9% | −55.9% | 284 / 324 | +0.4% / +1.0% | 13.4% / 15.1% |
+| Closeness + 6-month momentum | 13.1% | −53.9% | 26.0% | −57.3% | 205 / 246 | +0.8% / +1.4% | 9.6% / 11.3% |
+| Live, no buys below 0050's 200-day average | 12.5% | −27.1% | 38.1% | −29.7% | 122 / 161 | +1.1% / +2.4% | 5.7% / 7.8% |
+| Live, ranking every 10 days | 15.5% | −36.7% | 40.4% | −37.6% | 110 / 137 | +1.5% / +2.8% | 5.1% / 6.2% |
+| Live, 15% trailing stop | 19.8% | −29.7% | 44.5% | −37.6% | 134 / 171 | +1.5% / +2.6% | 6.3% / 7.6% |
+
+The untuned version is the first strategy here to beat 0050 in **both** periods,
+by about 5 points a year before 2020 and 15 since, with a similar worst drop. Adding
+revenue growth to the 52-week high halves the trading and roughly doubles the
+average trade. The variants were run after seeing results, so they are a
+sensitivity check, not a reason to change settings: a wider stop helped in both
+periods, and is the first thing to revisit after some live months.

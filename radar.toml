@@ -68,7 +68,8 @@ unpriced_exit = 25             # ...and again only after it has fallen below thi
 # the next trading day's open with [costs.tw] fees and tax, and is compared with
 # the same money put into the benchmark on its first fill day.
 strategies = ["revenue_momentum", "cycle_bottom", "revenue_momentum_foreign",  # the last: issue #67
-              "record_revenue", "breakout", "window_dressing", "pullback"]  # issues #70-#73
+              "record_revenue", "breakout", "window_dressing", "pullback",  # issues #70-#73
+              "near_high"]  # issue #92
 initial_capital = 5_000_000    # NTD, each portfolio
 benchmark = "0050"
 min_coverage = 0.9             # a day's prices count as collected once it has this share of the previous day's stocks
@@ -236,6 +237,18 @@ entry_rsi = 5.0                # buy when RSI(2) is below this, most oversold fi
 exit_ma_days = 5               # sell when the close is back above its 5-day average...
 max_hold_days = 10             # ...or after 10 trading days
 stop_loss = 0.10
+
+[strategy.near_high]           # issue #92: near the 52-week high with strong revenue growth (alpha lab #82)
+max_positions = 10             # each buy gets 1/max_positions of equity
+exit_rank = 30                 # a holding is kept while it ranks this high or better
+rebalance_days = 5             # rank again every this many trading days
+high_days = 250                # 52-week closing high, trading days
+revenue_weight = 0.5           # score = (1-w) x closeness-to-high rank + w x latest revenue YoY rank
+min_adv_ntd = 30_000_000       # NTD average traded value...
+adv_days = 20                  # ...over this many trading days
+min_price = 10.0               # NTD close
+min_base_ntd = 10_000_000      # a YoY off a smaller base (last year's month) doesn't count
+stop_loss = 0.10               # sell between rankings once 10% below the highest close since buying
 
 [alpha]                        # issue #76: the alpha lab tests every signal in backtest/radar_backtest/signals.py
 horizons = [1, 5, 10, 20]      # holding periods, trading days (buy at the next open, sell at the open this many days later)

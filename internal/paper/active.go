@@ -27,7 +27,8 @@ var common = regexp.MustCompile(`^[1-9]\d{3}$`)
 func activeDays(cfg config.Config) int {
 	s := cfg.Strategy
 	return max(s.Breakout.RegimeDays, s.Breakout.BreakoutDays+1, s.Breakout.VolumeDays+1, s.Breakout.ATRDays+1,
-		s.Pullback.TrendDays, s.Pullback.StrengthDays+1, s.RecordRevenue.ADVDays, s.WindowDressing.FlowDays) + 60
+		s.Pullback.TrendDays, s.Pullback.StrengthDays+1, s.RecordRevenue.ADVDays, s.WindowDressing.FlowDays,
+		s.NearHigh.HighDays) + 60
 }
 
 // liquid returns the common stocks listed and traded on day whose average
@@ -663,4 +664,162 @@ func rsi(m *market, t, day string, n int) (float64, bool) {
 		return 50, true
 	}
 	return 100 - 100/(1+up/down), true
+}
+
+// --- near the 52-week high (issue #92) --------------------------------------------
+
+// nearHigh: every rebalance_days trading days, rank liquid stocks by the
+// average percentile rank of closeness to their high_days closing high and
+// latest monthly revenue YoY; hold the top max_positions and keep a holding
+// while it ranks in the top exit_rank. Between rebalances, sell on a trailing
+// stop. The last ranking day is kept in the book's LastRebalance.
+type nearHigh struct {
+	p  config.NearHigh
+	db *sql.DB
+}
+
+func (s nearHigh) decide(m *market, b *book, h holdings) ([]*order, error) {
+	day := m.last()
+	var out []*order
+	selling := map[string]bool{}
+	for _, t := range sortedKeys(b.pos) {
+		px, ok := m.on(t, day)
+		if h.leave[t] || !ok {
+			continue
+		}
+		if hi := peak(m, t, b.pos[t].Opened, day); px.adj <= hi*(1-s.p.StopLoss) {
+			out = append(out, &order{Ticker: t, Side: "sell",
+				Reason: fmt.Sprintf("trailing stop: %s from its high since bought", pct(px.adj/hi-1))})
+			selling[t] = true
+		}
+	}
+	if b.LastRebalance != "" && b.LastRebalance <= day && heldDays(m, b.LastRebalance, day) < s.p.RebalanceDays {
+		return out, nil
+	}
+	ranks, err := s.ranking(m, day)
+	if err != nil {
+		return nil, err
+	}
+	b.LastRebalance = day
+	rank := map[string]int{}
+	for i, x := range ranks {
+		rank[x.t] = i + 1
+	}
+	for _, t := range sortedKeys(b.pos) {
+		if h.leave[t] || selling[t] {
+			continue
+		}
+		if r := rank[t]; r == 0 || r > s.p.ExitRank {
+			why := "no longer ranked"
+			if r > 0 {
+				why = fmt.Sprintf("fell to rank %d (keeps the top %d)", r, s.p.ExitRank)
+			}
+			out = append(out, &order{Ticker: t, Side: "sell", Reason: why})
+			selling[t] = true
+		}
+	}
+	free := s.p.MaxPositions - len(b.pos) - h.buys + len(selling)
+	if free <= 0 {
+		return out, nil
+	}
+	top := ranks[:min(len(ranks), s.p.MaxPositions)]
+	return append(out, buys(top, free, h, s.p.MaxPositions, func(x ranked) string {
+		return fmt.Sprintf("rank %d: near its 52-week high with strong revenue growth (score %.2f)", rank[x.t], x.score)
+	}, b)...), nil
+}
+
+// ranking scores the eligible stocks on day, best first, as near_high.py does.
+func (s nearHigh) ranking(m *market, day string) ([]ranked, error) {
+	cands, _, err := liquid(s.db, m, day, s.p.MinADVNTD, s.p.ADVDays)
+	if err != nil {
+		return nil, err
+	}
+	highDays := m.window(day, s.p.HighDays)
+	near := map[string]float64{}
+	for _, t := range cands {
+		b := m.bars[t][day]
+		if b.close < s.p.MinPrice {
+			continue
+		}
+		_, hi, n := window(m, t, highDays, adjOf)
+		if n >= int(0.8*float64(s.p.HighDays)) && hi > 0 {
+			near[t] = b.adj / hi
+		}
+	}
+	var yoy map[string]float64
+	if s.p.RevenueWeight > 0 {
+		if yoy, err = s.revenueYoY(m, day); err != nil {
+			return nil, err
+		}
+		for t := range near {
+			if _, ok := yoy[t]; !ok {
+				delete(near, t)
+			}
+		}
+	}
+	var nx, yx []ranked
+	for t, v := range near {
+		nx = append(nx, ranked{t, v})
+		if yoy != nil {
+			yx = append(yx, ranked{t, yoy[t]})
+		}
+	}
+	nr, yr := pctRank(nx), pctRank(yx)
+	out := make([]ranked, 0, len(nx))
+	for t := range near {
+		score := (1 - s.p.RevenueWeight) * nr[t]
+		if yoy != nil {
+			score += s.p.RevenueWeight * yr[t]
+		}
+		out = append(out, ranked{t, score})
+	}
+	best(out, false)
+	return out, nil
+}
+
+// revenueYoY is each stock's newest monthly revenue YoY usable on day: its
+// deadline (announced_on) passed before day and was at most 45 trading days
+// ago, and last year's same month was at least min_base_ntd.
+func (s nearHigh) revenueYoY(m *market, day string) (map[string]float64, error) {
+	w := m.window(day, 46)
+	if len(w) == 0 {
+		return nil, nil
+	}
+	q, err := s.db.Query(`SELECT ticker, month, revenue, yoy_pct FROM monthly_revenue WHERE market = 'TW'
+		AND announced_on != '' AND announced_on < ? AND announced_on >= ? AND yoy_pct IS NOT NULL
+		AND revenue IS NOT NULL ORDER BY ticker, month`, day, w[0])
+	if err != nil {
+		return nil, err
+	}
+	defer q.Close()
+	out := map[string]float64{}
+	for q.Next() {
+		var t, mo string
+		var r, y float64
+		if err := q.Scan(&t, &mo, &r, &y); err != nil {
+			return nil, err
+		}
+		if base := r / (1 + y/100); base >= s.p.MinBaseNTD {
+			out[t] = y // months ascend: the newest usable one wins
+		}
+	}
+	return out, q.Err()
+}
+
+// pctRank is pandas rank(pct=True): 1-based average ranks of ties over the count.
+func pctRank(xs []ranked) map[string]float64 {
+	sort.Slice(xs, func(i, j int) bool { return xs[i].score < xs[j].score })
+	out := map[string]float64{}
+	n := float64(len(xs))
+	for i := 0; i < len(xs); {
+		j := i
+		for j < len(xs) && xs[j].score == xs[i].score {
+			j++
+		}
+		for _, x := range xs[i:j] {
+			out[x.t] = (float64(i+1) + float64(j)) / 2 / n
+		}
+		i = j
+	}
+	return out
 }

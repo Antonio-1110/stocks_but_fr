@@ -125,7 +125,9 @@ var titles = map[string]struct{ title, rules string }{
 	"window_dressing": {"投信 window dressing",
 		"Four weeks before each quarter end: buy the 10 small and mid caps 投信 bought hardest over 20 days (as a share of traded value). Sell everything 3 days before the quarter ends, or on a 10% stop."},
 	"pullback": {"Pullback buys",
-		"Daily: among strong stocks (top 20% by 120-day return, above their 200-day average), buy up to 10 whose 2-day RSI drops below 10. Sell back above the 5-day average, after 10 days, or on a 10% stop. Trades a lot: fees and tax weigh heavily."},
+		"Daily: among strong stocks (top 20% by 120-day return, above their 200-day average), buy up to 10 whose 2-day RSI drops below 5. Sell back above the 5-day average, after 10 days, or on a 10% stop. Trades a lot: fees and tax weigh heavily."},
+	"near_high": {"52-week high + revenue",
+		"Weekly: rank liquid stocks by closeness to their 52-week high and latest revenue YoY (half each), hold the top 10 and keep a holding while it ranks in the top 30. Sell between rankings 10% below the high since bought."},
 }
 
 // Render is the `radar render` step: paper.html next to the dashboard.
