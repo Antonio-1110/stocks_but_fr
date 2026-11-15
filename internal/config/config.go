@@ -334,7 +334,7 @@ func Default() Config {
 			WindowDressing: WindowDressing{Quarters: []int{3, 6, 9, 12}, EntryDays: 28, ExitDays: 3, FlowDays: 20,
 				MaxPositions: 10, MinADVNTD: 20_000_000, ADVDays: 20, SkipLargest: 100, StopLoss: 0.10},
 			Pullback: Pullback{MaxPositions: 10, MinADVNTD: 30_000_000, ADVDays: 20, TrendDays: 200, StrengthDays: 120,
-				StrengthPct: 0.2, RSIDays: 2, EntryRSI: 10, ExitMADays: 5, MaxHoldDays: 10, StopLoss: 0.10},
+				StrengthPct: 0.2, RSIDays: 2, EntryRSI: 5, ExitMADays: 5, MaxHoldDays: 10, StopLoss: 0.10},
 		},
 		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
 		Paper: Paper{
