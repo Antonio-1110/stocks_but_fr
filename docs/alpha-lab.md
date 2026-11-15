@@ -1,4 +1,41 @@
-# Alpha lab: first results (issue #76)
+# Alpha lab (issues #76, #82)
+
+## Round 2: combinations, market regime, consistency (#82)
+
+*2026-11-15 run on snapshot 2026-11-14T17:11:50Z (prices to 2026-11-14), 42
+signals x 4 holds = 168 tries, so "passes" now needs t ≥ 3.62 in 2012–2019.*
+
+Two new columns say how to use a signal, not whether it passes: the 2020-on
+net edge on days 0050 closed **above** vs **below** its 200-day average, and
+the share of calendar years since 2012 with a positive net edge ("years +").
+
+| Signal | Hold | 2012–19 net (t) | 2020+ net (t) | Up market | Down market | Years + |
+|---|---|---|---|---|---|---|
+| **Near the 52-week high + revenue YoY** (new) | 20d | +0.60% (4.3) | **+1.20%** (5.0) | +1.49% | +0.27% | **100%** |
+| Near the 52-week high + revenue YoY | 10d | +0.21% (5.7) | +0.55% (6.2) | +0.69% | −0.13% | 73% |
+| Near the 52-week high + 6-month momentum (new) | 20d | +0.63% (3.9) | +1.05% (3.8) | +2.45% | −0.11% | 87% |
+| 投信 buying while near the 52-week high (new) | 20d | +1.02% (3.7) | +0.76% (2.0) | +2.81% | −0.11% | 87% |
+| Closest to the 52-week high | 20d | +0.61% (3.8) | +0.73% (3.1) | +1.46% | −0.56% | 93% |
+
+- **Adding revenue growth to the 52-week high is the best signal found so far.**
+  It beats closeness alone in both periods, was positive in every year since
+  2012, and is the only one still positive when the market is below trend.
+- **Every 52-week-high signal is an up-market signal.** Below 0050's 200-day
+  average the edge is gone or negative: a strategy built on it should stop
+  buying (or buy less) in a downtrend.
+- **Record revenue while near the high** (new event) made +1.95% a trade over 20
+  days since 2020 and was positive every year, but is "recent only": t 1.7 in
+  2012–2019 on few events.
+- 60-day return / volatility (20d) is "promising" (+0.92% net since 2020, t 3.1,
+  and positive in down markets too), short of the hurdle in 2012–2019.
+- No edge: first new high after a long base (too few events), drying-up volume
+  near the high (faded), overnight-gap momentum, industry momentum, near the
+  high + low volatility.
+
+The full leaderboard is in the daily run's Actions summary on lab weeks and on
+the Alpha page. The paper portfolio built on the top signal is #92.
+
+## Round 1 (#76)
 
 *2026-10-25 run on snapshot 2026-10-24T20:46:21Z (prices to 2026-10-22), code 88e1e7b.
 The full leaderboard is on the dashboard's Alpha page and in each lab run's
