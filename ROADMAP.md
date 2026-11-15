@@ -120,6 +120,17 @@ first run also rates about two years of past days as a labelled backtest.
 Details in [docs/ratings.md](docs/ratings.md). #79 fixed a date-dependent test
 that had stopped every daily run from 2026-11-08 to 11-12.
 
+**Strategy research round 2 (done 2026-11-15, #82, #83, #92)**: the alpha lab
+tests 42 signals and reports each one's edge in up and down markets and its share
+of positive years. "Near the 52-week high + revenue YoY" is the best signal yet
+and only 52-week-high signals pay in up markets ([docs/alpha-lab.md](docs/alpha-lab.md)).
+It became an 8th paper portfolio, `near_high`, the first strategy whose backtest
+beats 0050 in both periods (17.1% vs 11.9%, 41.7% vs 26.9%). Pullback now buys
+only below RSI(2) 5, which cuts its fees by a quarter but still loses since 2020
+([docs/active-strategies-results.md](docs/active-strategies-results.md)). Next:
+signals from the new margin/short, valuation and foreign-holding data once
+their backfill finishes.
+
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names
 have no official listing date.
