@@ -8,7 +8,7 @@ import sqlite3
 import pandas as pd
 
 from radar_backtest import data
-from strategies import breakout, pullback, record_revenue, swing, window_dressing
+from strategies import breakout, near_high, pullback, record_revenue, swing, window_dressing
 
 from . import fixture
 
@@ -130,8 +130,32 @@ def test_pullback_buys_a_dip_in_a_leader_and_sells_the_bounce(tmp_path):
     assert all(t != "2002" for t, *_ in cycles(strat))
 
 
+def test_near_high_buys_strong_revenue_at_highs_and_trails(tmp_path):
+    """#92: both 2001 and 2002 sit at their highs; 2001's revenue grows
+    faster, so it ranks first over 2003 (fastest growth, far from its high).
+    It is sold on the trailing stop."""
+    rising = [100.0 * 1.002 ** i for i in range(150)]
+    drop = rising + [rising[-1] * 0.85]
+    rev = []
+    for m in pd.date_range("2018-12-01", "2019-11-01", freq="MS"):
+        announced = (m + pd.offsets.MonthBegin(1)).replace(day=10).strftime("%Y-%m-%d")
+        rev += [("2001", m.strftime("%Y-%m-%d"), 5e8, 60.0, announced),
+                ("2002", m.strftime("%Y-%m-%d"), 5e8, 5.0, announced),
+                ("2003", m.strftime("%Y-%m-%d"), 5e8, 90.0, announced)]
+    db = build(tmp_path / "radar.db", {
+        "2001": drop,
+        "2002": rising + [rising[-1]] * 10,
+        "2003": [200.0 - 0.3 * i for i in range(len(DAYS))],   # best revenue, far below its high
+        "0050": [50.0],
+    }, revenue=rev)
+    params = {"min_adv_ntd": 1e6, "adv_days": 5, "max_positions": 1, "exit_rank": 1, "high_days": 50}
+    strat, _ = run(db, near_high.make, params, end=DAYS[160])
+    assert cycles(strat)[0][0] == "2001"
+    assert cycles(strat)[0][2] == "trail_stop"
+
+
 def test_unknown_keys_are_rejected():
-    for make in (record_revenue.make, breakout.make, window_dressing.make, pullback.make):
+    for make in (record_revenue.make, breakout.make, window_dressing.make, pullback.make, near_high.make):
         try:
             make({"nope": 1}, None)
         except ValueError:
