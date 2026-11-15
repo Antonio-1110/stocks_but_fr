@@ -131,3 +131,45 @@ def test_save_and_skip(settings, tmp_path):
     assert alpha.last_run(db).year == 2026
     md = alpha.markdown(res, "now", "test")
     assert "foreign_1d" in md and "passes" in md
+
+
+def test_combo_and_base_breakout_signals():
+    """#82: a combination is NaN where a part is missing; a first new high
+    needs 60 days without one."""
+    md = market()
+    x = signals.Inputs(md, None, pd.Series(0.10, index=DAYS))
+    combo = signals.BY_NAME["high_and_revenue"].fn(x)
+    assert combo["1102"].isna().all()                  # no revenue for 1102
+    assert combo.loc["2020-02-11", "1101"] > 0
+    close = pd.Series(100.0, index=DAYS)
+    close.iloc[300] = 120.0                            # one new high, then a long base
+    close.iloc[380] = 130.0
+    md.close["1101"] = md.adj_close["1101"] = close
+    x = signals.Inputs(md, None, pd.Series(0.10, index=DAYS))
+    first = signals.BY_NAME["first_new_high"].fn(x)["1101"]
+    assert first.iloc[380] == 1 and pd.isna(first.iloc[381])
+
+
+def test_regime_and_years_columns(settings, tmp_path):
+    """#82: the up/down split and yearly consistency are reported and saved,
+    also into a table created before they existed."""
+    md = market()
+    bench = pd.Series(np.linspace(50, 100, len(DAYS)), index=DAYS)   # always above its average
+    for f in ("open", "close", "adj_open", "adj_close", "volume", "turnover"):
+        getattr(md, f)["0050"] = bench if f != "volume" and f != "turnover" else 1e6
+    res, picks = alpha.run(md, settings, cfg(), only=["foreign_1d"], log=lambda *_: None)
+    r = res[res["horizon"] == 1].iloc[0]
+    assert r["up_days"] > 0 and r["down_days"] == 0 and r["up_net"] > 0
+    assert r["years"] == 4 and r["years_pos"] == 1.0
+    db = tmp_path / "old.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE alpha_results (run_at TEXT, snapshot TEXT, code TEXT, signal TEXT, family TEXT, "
+                "kind TEXT, label TEXT, horizon INTEGER, verdict TEXT, hurdle REAL, cost REAL, late_net REAL, "
+                "data_end TEXT, " + ", ".join(f"{p}_{m} REAL" for p in alpha.PERIODS for m in alpha.METRICS)
+                + ", PRIMARY KEY (run_at, signal, horizon))")
+    con.close()
+    alpha.save(db, res, picks, "2026-11-15 10:00:00", "snap", "abc")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT years_pos FROM alpha_results WHERE horizon = 1").fetchone()[0] == 1.0
+    con.close()
+    assert "Up market net" in alpha.markdown(res, "now", "test")

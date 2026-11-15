@@ -30,7 +30,7 @@ F = np.float32
 @dataclass(frozen=True)
 class Signal:
     name: str
-    family: str        # price, flows, revenue, calendar
+    family: str        # price, flows, revenue, calendar, combo
     kind: str          # "score" or "event"
     label: str         # what it means, in plain words
     fn: Callable[["Inputs"], pd.DataFrame]
@@ -302,6 +302,101 @@ def _post_exdiv(x: Inputs):
     return _dividend_days(x, before=0, after=4)
 
 
+# Combinations and refinements (issue #82) -----------------------------------
+# Fixed before the first run: higher is better for each part, as in the
+# single signals above. A combination averages the parts' percentile ranks
+# across all stocks that day and is NaN where any part is missing.
+
+def _rank_avg(*frames: pd.DataFrame) -> pd.DataFrame:
+    ranks = [f.rank(axis=1, pct=True) for f in frames]
+    out = sum(ranks) / len(ranks)
+    return out.astype(F)
+
+
+def _near_high_revenue(x: Inputs):
+    return _rank_avg(_near_high(x), _rev_yoy(x))
+
+
+def _near_high_trust(x: Inputs):
+    return _rank_avg(_near_high(x), _trust_20d(x))
+
+
+def _near_high_calm(x: Inputs):
+    return _rank_avg(_near_high(x), _low_vol(x))
+
+
+def _near_high_momentum(x: Inputs):
+    return _rank_avg(_near_high(x), _momentum_6m_skip(x))
+
+
+def _first_new_high(x: Inputs):
+    """A new 52-week closing high after at least 60 trading days without one:
+    a breakout from a long base."""
+    high = x.close.rolling(250, min_periods=200).max()
+    at_high = x.close >= high
+    recent = at_high.shift(1).astype(F).rolling(60, min_periods=60).max()
+    return _event(at_high & (recent == 0))
+
+
+def _quiet_near_high(x: Inputs):
+    """Within 5% of the 52-week high while the last 5 days traded under 70% of
+    the 50-day average volume: a pause before the next leg (volatility
+    contraction)."""
+    near = _near_high(x) >= 0.95
+    v5 = x.volume.rolling(5, min_periods=5).mean()
+    v50 = x.volume.shift(5).rolling(50, min_periods=40).mean()
+    return _event(near & (v5 < 0.7 * v50))
+
+
+def _overnight_momentum(x: Inputs):
+    """Sum of the last 20 overnight moves (previous close to open). Days with
+    no real open (open set to the close) add nothing."""
+    gap = np.log(x.open / x.close.shift(1))
+    return gap.rolling(20, min_periods=15).sum()
+
+
+def _intraday_momentum(x: Inputs):
+    """Sum of the last 20 open-to-close moves."""
+    return np.log(x.close / x.open).rolling(20, min_periods=15).sum()
+
+
+def _industry_momentum(x: Inputs):
+    """The stock's industry's average 20-day return (equal weight, at least 5
+    stocks with a price)."""
+    r = _momentum_20d(x)
+    ind = x.d.companies.drop_duplicates("ticker").set_index("ticker")["industry"]
+    ind = ind.reindex(r.columns).fillna("").replace("", np.nan)
+    out = pd.DataFrame(np.nan, index=r.index, columns=r.columns, dtype=F)
+    for _, cols in ind.dropna().groupby(ind.dropna()).groups.items():
+        cols = list(cols)
+        if len(cols) < 5:
+            continue
+        sub = r[cols]
+        m = sub.mean(axis=1).where(sub.notna().sum(axis=1) >= 5)
+        out[cols] = np.repeat(m.to_numpy(dtype=F)[:, None], len(cols), axis=1)
+    return out.where(r.notna())
+
+
+def _risk_adj_momentum(x: Inputs):
+    """60-day return divided by 60-day volatility, skipping the last 5 days."""
+    ret = x.close.shift(5) / x.close.shift(65) - 1
+    vol = x.ret1.shift(5).rolling(60, min_periods=45).std()
+    return ret / vol.where(vol > 0)
+
+
+def _record_near_high(x: Inputs):
+    """Record monthly revenue (first 5 days) while the close is within 10% of
+    its 52-week high: news the price already agrees with."""
+    rec = x.revenue_wide("record", fresh_days=4) == 1
+    return _event(rec & (_near_high(x) >= 0.9))
+
+
+def _trust_buy_near_high(x: Inputs):
+    """投信 net bought over 5 days (at least 2% of a day's volume) while within
+    5% of the 52-week high."""
+    return _event((x.flow_ratio(x.trust, 5) > 0.02) & (_near_high(x) >= 0.95))
+
+
 SIGNALS: list[Signal] = [
     Signal("reversal_1d", "price", "score", "Yesterday's losers (short-term reversal)", _reversal_1d),
     Signal("reversal_5d", "price", "score", "Last week's losers", _reversal_5d),
@@ -333,6 +428,19 @@ SIGNALS: list[Signal] = [
     Signal("revenue_record", "revenue", "event", "Record monthly revenue (3 years), first 5 days", _rev_record),
     Signal("pre_ex_dividend", "calendar", "event", "The 5 trading days before ex-dividend", _pre_exdiv),
     Signal("post_ex_dividend", "calendar", "event", "Ex-dividend day and the 4 days after (填息)", _post_exdiv),
+    # issue #82
+    Signal("high_and_revenue", "combo", "score", "Near the 52-week high + revenue YoY", _near_high_revenue),
+    Signal("high_and_trust", "combo", "score", "Near the 52-week high + 投信 buying, 20 days", _near_high_trust),
+    Signal("high_and_calm", "combo", "score", "Near the 52-week high + calm (low volatility)", _near_high_calm),
+    Signal("high_and_momentum", "combo", "score", "Near the 52-week high + 6-month momentum", _near_high_momentum),
+    Signal("first_new_high", "price", "event", "First 52-week high after 60+ days without one", _first_new_high),
+    Signal("quiet_near_high", "price", "event", "Within 5% of the 52-week high on drying-up volume", _quiet_near_high),
+    Signal("overnight_momentum", "price", "score", "Overnight gaps, last 20 days", _overnight_momentum),
+    Signal("intraday_momentum", "price", "score", "Open-to-close moves, last 20 days", _intraday_momentum),
+    Signal("industry_momentum", "price", "score", "Its industry's 20-day return", _industry_momentum),
+    Signal("risk_adj_momentum", "price", "score", "60-day return / volatility, skipping last week", _risk_adj_momentum),
+    Signal("record_near_high", "combo", "event", "Record revenue while near the 52-week high", _record_near_high),
+    Signal("trust_near_high", "combo", "event", "投信 buying while near the 52-week high", _trust_buy_near_high),
 ]
 
 BY_NAME = {s.name: s for s in SIGNALS}

@@ -24,6 +24,11 @@ period by luck alone, so a "passes" verdict needs the design-period edge to
 clear a Bonferroni hurdle (about t = 3.3) and the test period, which nothing
 was tuned on, to confirm it with t >= 2. Results go to the alpha_results and
 alpha_picks tables; the dashboard's Alpha page shows them.
+
+Issue #82 adds two checks that don't change the verdict but say how to use
+it: the test-period net edge split by market regime (the benchmark above or
+below its `regime_days` average on the signal day), and the share of calendar
+years since design_start with a positive net edge.
 """
 
 from __future__ import annotations
@@ -47,6 +52,9 @@ from .runner import BACKTEST_DIR, code_version
 PERIODS = ("design", "test", "recent")
 METRICS = ("days", "n", "ic", "ic_t", "edge", "edge_t", "net", "hit")
 GOOD = ("passes", "promising", "recent only")
+# Added by issue #82; older databases get them with ALTER TABLE.
+EXTRA_COLUMNS = {"up_days": "INTEGER", "up_net": "REAL", "up_edge_t": "REAL", "down_days": "INTEGER",
+                 "down_net": "REAL", "down_edge_t": "REAL", "years": "INTEGER", "years_pos": "REAL"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS alpha_results (
@@ -64,6 +72,14 @@ CREATE TABLE IF NOT EXISTS alpha_results (
 	late_net REAL,
 	data_end TEXT,
 	{metrics},
+	up_days  INTEGER,
+	up_net   REAL,
+	up_edge_t REAL,
+	down_days INTEGER,
+	down_net REAL,
+	down_edge_t REAL,
+	years    INTEGER,
+	years_pos REAL,
 	PRIMARY KEY (run_at, signal, horizon)
 );
 CREATE TABLE IF NOT EXISTS alpha_picks (
@@ -93,6 +109,7 @@ def lab_config(path: str | Path) -> dict:
         "recent_days": int(a.get("recent_days", 250)),
         "family_alpha": float(a.get("family_alpha", 0.05)),
         "picks": int(a.get("picks", 10)),
+        "regime_days": int(a.get("regime_days", 200)),
         "min_base_ntd": float(raw.get("revenue", {}).get("low_base", {}).get("min_base_ntd", 10_000_000)),
     }
 
@@ -225,6 +242,24 @@ def verdict(row: dict, hurdle: float) -> str:
     return "no edge"
 
 
+def regime(md: data.MarketData, ticker: str, days: int) -> pd.Series:
+    """True on days the benchmark closed above its `days`-day average, False
+    below, NaN before there is an average (or without the benchmark)."""
+    if ticker not in md.adj_close.columns:
+        return pd.Series(np.nan, index=md.calendar)
+    px = md.adj_close[ticker].ffill()
+    ma = px.rolling(days, min_periods=days).mean()
+    return (px > ma).astype(float).where(ma.notna())
+
+
+def consistency(stats: pd.DataFrame, kind: str, h: int, cost: float, start) -> tuple[int, float | None]:
+    """(years with trades, share of them with a positive net edge) from `start`."""
+    st = stats.loc[pd.Timestamp(start):]
+    nets = [summarize(g, kind, h, cost).get("net") for _, g in st.groupby(st.index.year)]
+    nets = [n for n in nets if n is not None]
+    return len(nets), (sum(n > 0 for n in nets) / len(nets) if nets else None)
+
+
 def spans(cal: pd.DatetimeIndex, settings: config.Settings, recent_days: int) -> dict:
     return {
         "design": (pd.Timestamp(settings.design_start), pd.Timestamp(settings.design_end)),
@@ -245,6 +280,7 @@ def run(md: data.MarketData, settings: config.Settings, cfg: dict,
     sigs = [s for s in signals.SIGNALS if not only or s.name in only]
     hurdle = NormalDist().inv_cdf(1 - cfg["family_alpha"] / (2 * len(signals.SIGNALS) * len(cfg["horizons"])))
     periods = spans(md.calendar, settings, cfg["recent_days"])
+    up = regime(md, settings.benchmark, cfg["regime_days"])
     exc = {(h, lag): excess_returns(x, univ, h, lag, tol)
            for h in cfg["horizons"] for lag in (0, 1)}
     rows, picks = [], []
@@ -262,6 +298,12 @@ def run(md: data.MarketData, settings: config.Settings, cfg: dict,
                 for k, v in summarize(st.loc[a:b], s.kind, h, cost).items():
                     row[f"{p}_{k}"] = v
             a, b = periods["test"]
+            tst = st.loc[a:b]
+            for name, want in (("up", 1.0), ("down", 0.0)):
+                part = summarize(tst[up.reindex(tst.index).eq(want).to_numpy()], s.kind, h, cost)
+                row[f"{name}_days"], row[f"{name}_net"], row[f"{name}_edge_t"] = \
+                    part.get("days", 0), part.get("net"), part.get("edge_t")
+            row["years"], row["years_pos"] = consistency(st, s.kind, h, cost, settings.design_start)
             late = daily_stats(frame.loc[a:b], s.kind, exc[(h, 1)].loc[a:b], univ.loc[a:b], cfg["min_stocks"])
             row["late_net"] = summarize(late, s.kind, h, cost).get("net")
             row["verdict"] = verdict(row, hurdle)
@@ -293,6 +335,10 @@ def save(db_path: str | Path, results: pd.DataFrame, picks: pd.DataFrame, run_at
     con = sqlite3.connect(db_path)
     try:
         con.executescript(SCHEMA)
+        have = {r[1] for r in con.execute("PRAGMA table_info(alpha_results)")}
+        for col, typ in EXTRA_COLUMNS.items():
+            if col not in have:
+                con.execute(f"ALTER TABLE alpha_results ADD COLUMN {col} {typ}")
         for table, df in (("alpha_results", results), ("alpha_picks", picks)):
             if df.empty:
                 continue
@@ -335,16 +381,19 @@ def markdown(results: pd.DataFrame, run_at: str, source: str) -> str:
     lines = [f"# Alpha lab leaderboard", "", f"*Run {run_at} on {source}.*", "",
              f"Round-trip cost {pct(results['cost'].iloc[0])}; passing hurdle t ≥ {results['hurdle'].iloc[0]:.2f} "
              "in 2012–2019, confirmed with t ≥ 2 from 2020. Edge = top-decile (or event) excess return per "
-             "trade vs the average liquid stock; net = after costs; late = net acted on a day later (2020 on).", "",
+             "trade vs the average liquid stock; net = after costs; late = net acted on a day later (2020 on). "
+             "Up/down market = test-period net on days the benchmark closed above/below its long average; "
+             "years + = share of calendar years since 2012 with a positive net.", "",
              "| Verdict | Signal | Hold (days) | Design edge (t) | Design net | Test edge (t) | Test net | Late net | "
-             "Last 12m net | Test IC | Test hit | Test trades |",
-             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+             "Last 12m net | Up market net | Down market net | Years + | Test IC | Test hit | Test trades |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for _, x in r.iterrows():
         lines.append(
             f"| {x['verdict']} | {x['signal']}: {x['label']} | {x['horizon']} | "
             f"{pct(x.get('design_edge'))} ({num(x.get('design_edge_t'))}) | {pct(x.get('design_net'))} | "
             f"{pct(x.get('test_edge'))} ({num(x.get('test_edge_t'))}) | {pct(x.get('test_net'))} | "
-            f"{pct(x.get('late_net'))} | {pct(x.get('recent_net'))} | {num(x.get('test_ic'), '{:.3f}')} | "
+            f"{pct(x.get('late_net'))} | {pct(x.get('recent_net'))} | {pct(x.get('up_net'))} | "
+            f"{pct(x.get('down_net'))} | {num(x.get('years_pos'), '{:.0%}')} | {num(x.get('test_ic'), '{:.3f}')} | "
             f"{num(x.get('test_hit'), '{:.0%}')} | {num(x.get('test_n'), '{:,.0f}')} |")
     return "\n".join(lines) + "\n"
 
