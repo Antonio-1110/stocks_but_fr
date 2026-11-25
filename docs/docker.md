@@ -22,7 +22,7 @@ Then:
 | Want to...                         | Run                                   |
 |------------------------------------|---------------------------------------|
 | see what it's doing                | `docker compose logs -f`              |
-| browse the site                    | open `http://<pi-address>:8080`       |
+| browse the site                    | open `http://localhost:8080` (see `web` below) |
 | run one collect right now          | `docker compose exec radar radar collect` |
 | pick up new code after `git pull`  | `docker compose up -d --build`        |
 | stop everything                    | `docker compose down`                 |
@@ -192,14 +192,18 @@ the container runs as root, so they'll be owned by root on the host (use
     image: nginx:1.29-alpine
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${WEB_BIND:-127.0.0.1}:8080:80"
     volumes:
       - ./public:/usr/share/nginx/html:ro
 ```
 A second service: the off-the-shelf nginx web server, serving the same
 `public/` folder read-only. `ports` maps `host:container`, so port 8080 on
-the Pi reaches nginx's port 80 inside. Open `http://<pi-address>:8080` from
-any device on your home network. (The public copy of the site still goes to
+the machine reaches nginx's port 80 inside. The address in front
+(`127.0.0.1` unless `WEB_BIND` is set) means only the machine itself can open
+`http://localhost:8080`: Docker skips Ubuntu's firewall, so without it the
+site would be open to everyone on the same Wi-Fi. On the home-lab laptop the
+`hub` repo gives it a Tailscale address for my own devices. On a Pi without
+hub, put `WEB_BIND=0.0.0.0` in `.env` to open it to the home network. (The public copy of the site still goes to
 GitHub Pages; this is just for looking at it at home.) Don't want it? Delete
 this block, or run `docker compose up -d radar` to start only the pipeline.
 
