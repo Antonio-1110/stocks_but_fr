@@ -54,8 +54,8 @@ func server(t *testing.T) *httptest.Server {
 		case r.URL.Path == "/pm/markets":
 			b, _ := os.ReadFile("testdata/polymarket_markets.json")
 			w.Write(b)
-		case r.URL.Path == "/k/markets":
-			b, _ := os.ReadFile("testdata/kalshi_markets.json")
+		case r.URL.Path == "/k/events":
+			b, _ := os.ReadFile("testdata/kalshi_events.json")
 			w.Write(b)
 		default:
 			http.NotFound(w, r)

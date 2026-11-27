@@ -256,7 +256,7 @@ cards_file = "narratives.toml" # hand-written narrative cards (claim, market, ou
 sources = ["polymarket", "kalshi"]  # public odds, no key
 fetch_hours = 3                # poll each source at most this often
 polymarket = 1000              # open Polymarket markets read, busiest (24h volume) first
-kalshi_pages = 5               # pages of up to 1000 open Kalshi markets read
+kalshi_pages = 60              # pages of 200 open Kalshi events (with their markets) read
 min_volume_24h = 5_000         # USD; quieter markets aren't stored (a card's named market always is)
 # Weekly news scan, only with the ANTHROPIC_API_KEY secret: Claude reads the week's news with web search
 # next to the busiest markets and proposes cards with views.

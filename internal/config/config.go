@@ -383,7 +383,7 @@ func Default() Config {
 		},
 		Narratives: Narratives{
 			CardsFile: "narratives.toml", Sources: []string{"polymarket", "kalshi"}, FetchHours: 3,
-			Polymarket: 1000, KalshiPages: 5, MinVolume24h: 5_000,
+			Polymarket: 1000, KalshiPages: 60, MinVolume24h: 5_000,
 			NewsModel: "claude-opus-5-5", NewsEvery: 7, NewsCards: 10, NewsMarkets: 150, NewsSearches: 12, TradeNews: true,
 			MinEdge: 0.08, ExitEdge: 0.03, MaxWeight: 0.3, JumpDays: 5, MinJump: 0.10, JumpWeight: 0.5,
 			Decided: 0.03, MaxNarrativeShare: 0.3, MinADVNTD: 10_000_000, ADVDays: 20, StopLoss: 0.15,
@@ -398,7 +398,7 @@ type Narratives struct {
 	Sources      []string `toml:"sources"`        // prediction markets polled: polymarket, kalshi
 	FetchHours   float64  `toml:"fetch_hours"`    // poll each source at most this often
 	Polymarket   int      `toml:"polymarket"`     // open Polymarket markets kept, by 24h volume
-	KalshiPages  int      `toml:"kalshi_pages"`   // pages of 1000 open Kalshi markets read
+	KalshiPages  int      `toml:"kalshi_pages"`   // pages of 200 open Kalshi events (with their markets) read
 	MinVolume24h float64  `toml:"min_volume_24h"` // USD; quieter markets aren't stored (cards' markets always are)
 
 	NewsModel    string `toml:"news_model"`    // Claude model for the weekly news scan

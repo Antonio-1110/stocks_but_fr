@@ -264,7 +264,7 @@ type pmMarket struct {
 func (p *polymarket) fetch(ctx context.Context, wanted []string) ([]Market, error) {
 	var out []Market
 	have := map[string]bool{}
-	const page = 500
+	const page = 100 // the gamma API serves at most about this many per call
 	for off := 0; off < p.limit; off += page {
 		q := url.Values{"active": {"true"}, "closed": {"false"}, "order": {"volume24hr"}, "ascending": {"false"},
 			"limit": {strconv.Itoa(min(page, p.limit-off))}, "offset": {strconv.Itoa(off)}}
@@ -278,10 +278,10 @@ func (p *polymarket) fetch(ctx context.Context, wanted []string) ([]Market, erro
 				out = append(out, r)
 			}
 		}
-		if len(rows) < page {
+		if len(rows) == 0 {
 			break
 		}
-		time.Sleep(time.Second)
+		time.Sleep(300 * time.Millisecond)
 	}
 	for _, slug := range wanted {
 		if have[slug] {
@@ -360,29 +360,52 @@ type kPage struct {
 	Cursor  string    `json:"cursor"`
 }
 
+type kEvents struct {
+	Events []struct {
+		EventTicker string    `json:"event_ticker"`
+		Markets     []kMarket `json:"markets"`
+	} `json:"events"`
+	Cursor string `json:"cursor"`
+}
+
+// fetch reads open events with their markets. The /markets list isn't
+// ordered by activity, and its first pages are mostly untraded markets (the
+// first live run, #95, kept none of 4,882); events are fewer, so a few dozen
+// pages cover them.
 func (k *kalshi) fetch(ctx context.Context, wanted []string) ([]Market, error) {
 	var out []Market
 	have := map[string]bool{}
 	cursor := ""
+	maxVol := 0.0
 	for i := 0; i < k.pages; i++ {
-		q := url.Values{"status": {"open"}, "limit": {"1000"}, "mve_filter": {"exclude"}}
+		q := url.Values{"status": {"open"}, "limit": {"200"}, "with_nested_markets": {"true"}}
 		if cursor != "" {
 			q.Set("cursor", cursor)
 		}
-		var pg kPage
-		if err := get(ctx, k.client, k.base+"/markets?"+q.Encode(), &pg); err != nil {
+		var pg kEvents
+		if err := get(ctx, k.client, k.base+"/events?"+q.Encode(), &pg); err != nil {
+			if i > 0 {
+				log.Printf("narratives: kalshi: page %d: %v; keeping the first %d pages", i+1, err, i)
+				break
+			}
 			return nil, err
 		}
-		for _, m := range parseKalshi(pg.Markets) {
-			have[m.ID] = true
-			out = append(out, m)
+		for _, e := range pg.Events {
+			for _, m := range parseKalshi(e.Markets) {
+				if !have[m.ID] {
+					have[m.ID] = true
+					maxVol = math.Max(maxVol, m.Volume24h)
+					out = append(out, m)
+				}
+			}
 		}
-		if pg.Cursor == "" || len(pg.Markets) == 0 {
+		if pg.Cursor == "" || len(pg.Events) == 0 {
 			break
 		}
 		cursor = pg.Cursor
-		time.Sleep(time.Second)
+		time.Sleep(300 * time.Millisecond)
 	}
+	log.Printf("narratives: kalshi: busiest market traded about $%.0f in 24h", maxVol)
 	for _, t := range wanted {
 		if have[t] {
 			continue
