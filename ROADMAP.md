@@ -131,6 +131,15 @@ only below RSI(2) 5, which cuts its fees by a quarter but still loses since 2020
 signals from the new margin/short, valuation and foreign-holding data once
 their backfill finishes.
 
+**World narratives (started 2026-11-27, #95)**: a 9th paper portfolio,
+`narrative`, bets on narratives priced by prediction markets (Fed decisions,
+Nvidia's CEO, recession, cross-strait risk). Each run stores Polymarket and
+Kalshi odds; cards in `narratives.toml` (and, with an `ANTHROPIC_API_KEY`
+secret, a weekly Claude news scan) map each one to the Taiwan stocks that gain
+either way. It holds the winners where our view is 8+ points from the odds, or,
+without a view, where the odds jumped 10+ points in 5 days. No backtest: odds
+history starts now. Page: narratives.html. Next: real views on the starter cards.
+
 Known limits, not scheduled: cycle bottom uses each company's current industry
 (past labels aren't available from any source we reach); 14 delisted TWSE names
 have no official listing date.
