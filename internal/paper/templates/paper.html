@@ -138,7 +138,7 @@
 
 {{with .Current}}
 <section class="panel book" id="{{.Name}}">
-  <p class="muted rules">{{.Rules}} Started on the {{.StartedOn}} close with NT${{ntd .Capital}}.</p>
+  <p class="muted rules">{{.Rules}} Started on the {{.StartedOn}} close with NT${{ntd .Capital}}.{{if eq .Name "narrative"}} <a href="narratives.html">Narrative cards and odds &gt;</a>{{end}}</p>
   <dl class="tiles">
     <div class="tile"><dt>Value after costs</dt><dd>NT${{ntd .Value}}<small class="{{sign .Return}}">{{pct .Return}}</small></dd></div>
     <div class="tile"><dt>{{$.Benchmark}} same money</dt><dd>{{if .HasBench}}NT${{ntd .Bench}}<small class="{{sign .BenchReturn}}">{{pct .BenchReturn}}</small>{{else}}<span class="muted">buys at next open</span>{{end}}</dd></div>

@@ -126,6 +126,8 @@ var titles = map[string]struct{ title, rules string }{
 		"Four weeks before each quarter end: buy the 10 small and mid caps 投信 bought hardest over 20 days (as a share of traded value). Sell everything 3 days before the quarter ends, or on a 10% stop."},
 	"pullback": {"Pullback buys",
 		"Daily: among strong stocks (top 20% by 120-day return, above their 200-day average), buy up to 10 whose 2-day RSI drops below 5. Sell back above the 5-day average, after 10 days, or on a 10% stop. Trades a lot: fees and tax weigh heavily."},
+	"narrative": {"World narratives",
+		"Daily: hold the Taiwan winners of narratives (Fed, tariffs, AI, leadership changes...) where our view differs from the prediction market's odds by 8+ points, sized by the gap, or, with no view, where the odds jumped 10+ points in 5 days. Sell when the narrative goes quiet or 15% below cost."},
 	"near_high": {"52-week high + revenue",
 		"Weekly: rank liquid stocks by closeness to their 52-week high and latest revenue YoY (half each), hold the top 10 and keep a holding while it ranks in the top 30. Sell between rankings 10% below the high since bought."},
 }

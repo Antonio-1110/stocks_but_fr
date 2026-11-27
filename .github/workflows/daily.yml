@@ -190,6 +190,7 @@ jobs:
       - name: Collect
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # weekly narrative news scan (#95); optional
         run: |
           set -o pipefail
           ./radar collect 2>&1 | tee collect.log

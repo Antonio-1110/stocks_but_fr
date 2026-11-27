@@ -1,0 +1,14 @@
+{"cursor": "",
+ "markets": [
+  {"ticker": "KXFEDDECISION-26DEC-H25", "event_ticker": "KXFEDDECISION-26DEC", "market_type": "binary",
+   "title": "Fed decision in Dec 2026?", "yes_sub_title": "Hike 25bps", "no_sub_title": "Hike 25bps",
+   "status": "active", "close_time": "2026-12-09T18:55:00Z",
+   "yes_bid": 69, "yes_ask": 71, "last_price": 70, "previous_price": 66,
+   "yes_bid_dollars": "0.6900", "yes_ask_dollars": "0.7100", "last_price_dollars": "0.7000",
+   "volume": 4210000, "volume_24h": 120000, "open_interest": 900000},
+  {"ticker": "KXRECSSNBER-26", "event_ticker": "KXRECSSNBER-26", "title": "US recession in 2026?",
+   "yes_sub_title": "", "status": "active", "close_time": "2027-01-01T15:00:00Z",
+   "yes_bid": 0, "yes_ask": 0, "last_price": 22, "volume_24h": 30000},
+  {"ticker": "KXEMPTY-1", "event_ticker": "KXEMPTY", "title": "Never traded", "status": "active",
+   "close_time": "2027-01-01T15:00:00Z", "yes_bid": 0, "yes_ask": 0, "last_price": 0, "volume_24h": 0}
+ ]}

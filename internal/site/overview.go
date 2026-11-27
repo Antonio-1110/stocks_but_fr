@@ -89,6 +89,7 @@ var paperTitles = map[string]string{
 	"breakout":                 "Breakout swing",
 	"window_dressing":          "投信 window dressing",
 	"pullback":                 "Pullback buys",
+	"narrative":                "World narratives", // issue #95
 }
 
 func paperTitle(name string) string {

@@ -224,9 +224,11 @@ func strategyFor(name string, cfg config.Config, db *sql.DB) (strategy, error) {
 		return pullback{cfg.Strategy.Pullback, db}, nil
 	case "near_high":
 		return nearHigh{cfg.Strategy.NearHigh, db}, nil
+	case "narrative":
+		return narrative{cfg.Narratives, db}, nil // issue #95
 	}
 	return nil, fmt.Errorf("unknown strategy %q (want revenue_momentum, revenue_momentum_foreign, cycle_bottom, "+
-		"record_revenue, breakout, window_dressing, pullback or near_high)", name)
+		"record_revenue, breakout, window_dressing, pullback, near_high or narrative)", name)
 }
 
 func step(db *sql.DB, cfg config.Config, m *market, name string, s strategy, now time.Time) error {

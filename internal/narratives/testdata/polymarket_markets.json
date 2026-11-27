@@ -1,0 +1,20 @@
+[
+  {"id": "612345", "question": "Will the Fed increase interest rates by 25 bps after the December 2026 meeting?",
+   "conditionId": "0x80b3af88cb991980e8da1ce86b9794a0957f96ec98c29319dd7ba65e9744d82b",
+   "slug": "will-the-fed-increase-interest-rates-by-25-bps-after-the-december-2026-meeting",
+   "endDate": "2026-12-09T12:00:00Z", "outcomes": "[\"Yes\", \"No\"]", "outcomePrices": "[\"0.875\", \"0.125\"]",
+   "volume": "35170000.12", "volumeNum": 35170000.12, "volume24hr": 1250000.5, "active": true, "closed": false,
+   "oneDayPriceChange": 0.015, "oneWeekPriceChange": 0.02, "lastTradePrice": 0.87, "bestBid": 0.87, "bestAsk": 0.88,
+   "events": [{"id": "1001", "slug": "fed-decision-in-december-2026", "title": "Fed Decision in December?"}]},
+  {"id": "612400", "question": "Jensen Huang rejoins NVIDIA by December 31, 2026?",
+   "slug": "jensen-huang-rejoins-nvidia-by-december-31-2026",
+   "endDate": "2026-12-31T12:00:00Z", "outcomes": "[\"Yes\", \"No\"]", "outcomePrices": "[\"0.095\", \"0.905\"]",
+   "volume24hr": 84000, "active": true, "closed": false,
+   "events": [{"id": "1002", "slug": "jensen-huang-rejoins-nvidia"}]},
+  {"id": "612500", "question": "Lakers vs. Celtics", "slug": "nba-lal-bos-2026-11-28",
+   "endDate": "2026-11-28T03:00:00Z", "outcomes": "[\"Lakers\", \"Celtics\"]", "outcomePrices": "[\"0.41\", \"0.59\"]",
+   "volume24hr": 900000, "active": true, "closed": false, "events": [{"slug": "nba-lal-bos-2026-11-28"}]},
+  {"id": "612600", "question": "Tiny market", "slug": "tiny-market",
+   "endDate": "2027-01-31T00:00:00Z", "outcomes": "[\"Yes\", \"No\"]", "outcomePrices": "[\"0.5\", \"0.5\"]",
+   "volume24hr": "120.5", "active": true, "closed": false, "events": []}
+]

@@ -69,7 +69,8 @@ unpriced_exit = 25             # ...and again only after it has fallen below thi
 # the same money put into the benchmark on its first fill day.
 strategies = ["revenue_momentum", "cycle_bottom", "revenue_momentum_foreign",  # the last: issue #67
               "record_revenue", "breakout", "window_dressing", "pullback",  # issues #70-#73
-              "near_high"]  # issue #92
+              "near_high",  # issue #92
+              "narrative"]  # issue #95: world narratives, see [narratives]
 initial_capital = 5_000_000    # NTD, each portfolio
 benchmark = "0050"
 min_coverage = 0.9             # a day's prices count as collected once it has this share of the previous day's stocks
@@ -249,6 +250,37 @@ adv_days = 20                  # ...over this many trading days
 min_price = 10.0               # NTD close
 min_base_ntd = 10_000_000      # a YoY off a smaller base (last year's month) doesn't count
 stop_loss = 0.10               # sell between rankings once 10% below the highest close since buying
+
+[narratives]                   # issue #95: world narratives priced by prediction markets, traded as paper portfolio "narrative"
+cards_file = "narratives.toml" # hand-written narrative cards (claim, market, our view, Taiwan winners each way)
+sources = ["polymarket", "kalshi"]  # public odds, no key
+fetch_hours = 3                # poll each source at most this often
+polymarket = 1000              # open Polymarket markets read, busiest (24h volume) first
+kalshi_pages = 5               # pages of up to 1000 open Kalshi markets read
+min_volume_24h = 5_000         # USD; quieter markets aren't stored (a card's named market always is)
+# Weekly news scan, only with the ANTHROPIC_API_KEY secret: Claude reads the week's news with web search
+# next to the busiest markets and proposes cards with views.
+news_model = "claude-opus-5-5"
+news_every = 7                 # days between scans
+news_cards = 10                # cards it proposes, at most
+news_markets = 150             # busiest markets shown to it (plus the biggest movers)
+news_searches = 12             # web searches it may run per scan
+trade_news = true              # trade its cards too, not only narratives.toml
+# The portfolio: a card is live when our view is min_edge or more from the market's odds (hold the side
+# the market underprices), or, for a card with no view, when the odds moved min_jump in jump_days
+# (hold the side they moved to). Money per live card is proportional to its gap (a jump counts
+# jump_weight times), at most max_narrative_share of equity, split evenly over its Taiwan stocks.
+min_edge = 0.08                # 8 points
+exit_edge = 0.03               # a held card stays live until the gap shrinks below this
+max_weight = 0.3               # a gap or jump bigger than this counts as this
+jump_days = 5                  # calendar days
+min_jump = 0.10                # 10 points; a held jump card stays live while the move is at least half this
+jump_weight = 0.5
+decided = 0.03                 # odds under 3% or over 97% count as settled: nothing to trade
+max_narrative_share = 0.3      # of equity, per card
+min_adv_ntd = 10_000_000       # a stock needs this average traded value, NTD...
+adv_days = 20                  # ...over this many trading days
+stop_loss = 0.15               # sell a holding 15% below its cost; not bought again for 20 trading days
 
 [alpha]                        # issue #76: the alpha lab tests every signal in backtest/radar_backtest/signals.py
 horizons = [1, 5, 10, 20]      # holding periods, trading days (buy at the next open, sell at the open this many days later)

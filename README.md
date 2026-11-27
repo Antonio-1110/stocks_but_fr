@@ -129,5 +129,9 @@ Every new one gets listed here.
   write on the private data repo. Required: without it the daily run stops.
 - `DATA_REPO`: Actions variable naming the data repo. Optional; the default is
   this repo's name plus `-data`.
+- `ANTHROPIC_API_KEY`: Actions secret, a Claude API key (console.anthropic.com).
+  Optional; with it, the daily run has Claude scan the week's news once a week
+  and propose narrative cards for the `narrative` paper portfolio (#95,
+  `[narratives]` in `radar.toml`). Without it only `narratives.toml` trades.
 
 Not financial advice.

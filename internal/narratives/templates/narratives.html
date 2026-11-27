@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World narratives</title>
+<meta name="theme-color" content="#07060d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="static/style.css">
+<style>
+/* Narratives-page-only rules; theme tokens come from static/style.css. */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.card { border: 1px solid var(--line); border-left: 3px solid var(--violet); padding: 10px 12px; min-width: 0; background: rgba(185, 103, 255, 0.04); }
+.card.live { border-left-color: var(--cyan); background: rgba(0, 240, 255, 0.05); }
+.card h3 { margin: 0 0 4px; font-size: .95rem; }
+.card .src { float: right; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.card .claim { margin: 0 0 6px; font-size: .82rem; color: var(--muted); }
+.card .mk { font-size: .78rem; overflow-wrap: anywhere; display: block; margin-bottom: 6px; }
+.card dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 0 0 6px; }
+.card dl div { min-width: 0; }
+.card dt { color: var(--muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
+.card dd { margin: 0; font-size: 1rem; }
+.card .side { color: var(--yellow); }
+.card .basis { font-size: .78rem; margin: 0 0 6px; }
+.card .who { font-size: .8rem; margin: 2px 0; }
+.card .who b { color: var(--muted); font-weight: normal; margin-right: 4px; }
+.card .who a { color: var(--fg); font-family: var(--cjk), var(--mono); margin-right: 6px; white-space: nowrap; }
+.card .who a.held { color: var(--cyan); }
+.card .who a.held::after { content: " ●"; font-size: .7em; }
+.card details { font-size: .78rem; margin-top: 4px; }
+.card details p { margin: 4px 0; }
+.card svg { width: 100%; height: 30px; display: block; margin: 2px 0 6px; }
+.card svg polyline { fill: none; stroke: var(--cyan); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.card svg line { stroke: var(--line); vector-effect: non-scaling-stroke; }
+.q { overflow-wrap: anywhere; }
+@media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Pages">
+  <a class="brand" href="index.html">TW<span>//</span>RADAR</a>
+  <a href="index.html">Overview</a>
+  <a href="screener.html">Screener</a>
+  <a href="paper.html" aria-current="page">Paper</a>
+  <a href="alpha.html">Alpha</a>
+  <a href="ratings.html">Ratings</a>
+  <a href="us.html">US</a>
+  <a href="calendar.html">Calendar</a>
+  <a href="health.html">Health</a>
+</nav>
+<header>
+  <h1 data-text="World narratives">World narratives</h1>
+  <p class="stamp">Last updated <b>{{.GeneratedAt}}</b> <span class="sep">//</span> <b>{{.Markets}}</b> open prediction markets tracked <span class="sep">//</span> <a href="paper-narrative.html">paper portfolio &gt;</a></p>
+</header>
+
+<main>
+<section class="panel">
+  <h2>Live narratives <span class="count">{{len .Live}}</span></h2>
+  <p class="muted hint">The paper portfolio holds the Taiwan winners of these (● = held now). A card is live when our view is {{printf "%.0f" .MinEdge}}+ points from the market's odds, or, with no view, when the odds moved {{printf "%.0f" .MinJump}}+ points in {{.JumpDays}} days. Money follows the size of the gap.</p>
+  {{if .Live}}<div class="cards">{{range .Live}}{{template "card" .}}{{end}}</div>
+  {{else}}<p class="empty">Nothing live right now: no card's view is far enough from its odds, and no odds jumped.</p>{{end}}
+</section>
+
+<section class="panel">
+  <h2>Watching <span class="count">{{len .Quiet}}</span></h2>
+  <p class="muted hint">Cards with no trade today, and why. Hand-written cards live in <code>narratives.toml</code>; edit a view or add a card there.</p>
+  {{if .Quiet}}<div class="cards">{{range .Quiet}}{{template "card" .}}{{end}}</div>{{else}}<p class="muted">No other cards.</p>{{end}}
+</section>
+
+<section class="panel">
+  <h2>This week's news scan</h2>
+  {{if .ScanAt}}
+  <p class="muted hint">Claude read the week's news with web search on {{.ScanAt}} and proposed the cards marked NEWS.{{if .ScanError}} <span class="up">The latest attempt failed: {{.ScanError}}</span>{{end}}</p>
+  {{if .Summary}}<p>{{.Summary}}</p>{{end}}
+  {{else if .NoKey}}
+  <p class="empty">No scan yet. It runs weekly once an <code>ANTHROPIC_API_KEY</code> repository secret is set: Claude reads the week's news and proposes cards with views. Until then only the hand-written cards trade.</p>
+  {{else}}<p class="muted">The first scan runs once prediction-market odds are stored.</p>{{end}}
+</section>
+
+<section class="panel">
+  <h2>Biggest odds moves, {{.JumpDays}} days</h2>
+  <p class="muted hint">Markets with $10k+ traded in the last day. A big move is a narrative changing: worth a card if Taiwan stocks ride on it.</p>
+  {{if .Movers}}{{template "markets" .Movers}}{{else}}<p class="muted">Not enough odds history yet: moves show after {{.JumpDays}} days of runs.</p>{{end}}
+</section>
+
+<section class="panel">
+  <h2>Busiest markets</h2>
+  {{if .Busiest}}{{template "markets" .Busiest}}{{else}}<p class="muted">No prediction-market data yet.</p>{{end}}
+</section>
+<footer class="muted">Odds from Polymarket and Kalshi's public data, polled a few times a day. A market's price is the crowd's chance of yes, not a forecast of ours. Paper money only.</footer>
+</main>
+</body>
+</html>
+{{define "card"}}
+<article class="card{{if .Live}} live{{end}}" id="{{.ID}}">
+  <span class="src">{{.Source}}{{if .Strength}} · {{.Strength}}{{end}}</span>
+  <h3>{{.Title}}</h3>
+  {{if .Claim}}<p class="claim">{{.Claim}}</p>{{end}}
+  {{if .MarketURL}}<a class="mk" href="{{.MarketURL}}" target="_blank" rel="noopener">{{.MarketSource}}: {{.MarketTitle}}</a>{{end}}
+  <dl>
+    <div><dt>Market</dt><dd>{{or .Odds "–"}}</dd></div>
+    <div><dt>Move</dt><dd class="{{.MoveSign}}">{{or .Move "–"}}</dd></div>
+    <div><dt>Our view</dt><dd>{{or .ViewText "–"}}</dd></div>
+    <div><dt>Hold</dt><dd class="side">{{if .Side}}{{.Side}}{{else}}–{{end}}</dd></div>
+  </dl>
+  {{if .Spark}}<svg viewBox="0 0 100 30" preserveAspectRatio="none" aria-label="Odds, last 60 days"><line x1="0" y1="15" x2="100" y2="15"/><polyline points="{{.Spark}}"/></svg>{{end}}
+  <p class="basis muted">{{.Basis}}</p>
+  {{if .YesW}}<p class="who"><b>If yes</b>{{range .YesW}}<a {{if .Held}}class="held" {{end}}href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID={{.Ticker}}" target="_blank" rel="noopener">{{.Ticker}} {{.Name}}</a>{{end}}</p>{{end}}
+  {{if .NoW}}<p class="who"><b>If no</b>{{range .NoW}}<a {{if .Held}}class="held" {{end}}href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID={{.Ticker}}" target="_blank" rel="noopener">{{.Ticker}} {{.Name}}</a>{{end}}</p>{{end}}
+  {{if or .YesUS .NoUS}}<p class="who muted"><b>US</b>{{if .YesUS}}yes: {{range $i, $t := .YesUS}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}{{if and .YesUS .NoUS}} · {{end}}{{if .NoUS}}no: {{range $i, $t := .NoUS}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}</p>{{end}}
+  {{if or .Why .WrongIf .Catalyst}}<details><summary>Why, and what would prove it wrong</summary>
+    {{if .Why}}<p>{{.Why}}</p>{{end}}
+    {{if .WrongIf}}<p><b>Wrong if:</b> {{.WrongIf}}</p>{{end}}
+    {{if .Catalyst}}<p><b>Catalyst:</b> {{.Catalyst}}</p>{{end}}
+  </details>{{end}}
+</article>
+{{end}}
+{{define "markets"}}
+<table>
+  <thead><tr><th>Market</th><th class="num">Yes</th><th class="num">Move</th><th class="num">Ends</th><th class="num">24h $</th></tr></thead>
+  <tbody>{{range .}}
+    <tr>
+      <td class="q"><a href="{{.URL}}" target="_blank" rel="noopener">{{.Question}}</a><br><small class="muted">{{.Source}}:{{.ID}}</small></td>
+      <td class="num" data-label="Yes">{{.Odds}}</td>
+      <td class="num {{if .Move}}{{if .Up}}up{{else}}down{{end}}{{end}}" data-label="Move">{{or .Move "–"}}</td>
+      <td class="num" data-label="Ends">{{.EndDate}}</td>
+      <td class="num" data-label="24h $">{{printf "%.0f" .Volume24h}}</td>
+    </tr>{{end}}
+  </tbody>
+</table>
+{{end}}

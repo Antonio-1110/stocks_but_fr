@@ -20,6 +20,8 @@ type Config struct {
 	Paper    Paper    `toml:"paper"`
 	US       US       `toml:"us"`
 	Ratings  Ratings  `toml:"ratings"`
+
+	Narratives Narratives `toml:"narratives"` // issue #95
 }
 
 type Run struct {
@@ -356,7 +358,7 @@ func Default() Config {
 		Alerts: Alerts{Rules: []string{"revenue_momentum", "unpriced"}, UnpricedTop: 10, UnpricedExit: 25},
 		Paper: Paper{
 			Strategies: []string{"revenue_momentum", "cycle_bottom", "revenue_momentum_foreign",
-				"record_revenue", "breakout", "window_dressing", "pullback", "near_high"},
+				"record_revenue", "breakout", "window_dressing", "pullback", "near_high", "narrative"},
 			InitialCapital: 5_000_000,
 			Benchmark:      "0050",
 			MinCoverage:    0.9,
@@ -379,7 +381,44 @@ func Default() Config {
 			LongMomentumWeight: 0.25, LongMAWeight: 0.25, LongHighWeight: 0.25, LongRevenueWeight: 0.25,
 			RevenueDeadlineDay: 10, BackfillDays: 500, BackfillStep: 5,
 		},
+		Narratives: Narratives{
+			CardsFile: "narratives.toml", Sources: []string{"polymarket", "kalshi"}, FetchHours: 3,
+			Polymarket: 1000, KalshiPages: 5, MinVolume24h: 5_000,
+			NewsModel: "claude-opus-5-5", NewsEvery: 7, NewsCards: 10, NewsMarkets: 150, NewsSearches: 12, TradeNews: true,
+			MinEdge: 0.08, ExitEdge: 0.03, MaxWeight: 0.3, JumpDays: 5, MinJump: 0.10, JumpWeight: 0.5,
+			Decided: 0.03, MaxNarrativeShare: 0.3, MinADVNTD: 10_000_000, ADVDays: 20, StopLoss: 0.15,
+		},
 	}
+}
+
+// Narratives is [narratives]: world narratives tracked through prediction
+// markets and traded as a paper portfolio (issue #95).
+type Narratives struct {
+	CardsFile    string   `toml:"cards_file"`     // hand-written narrative cards
+	Sources      []string `toml:"sources"`        // prediction markets polled: polymarket, kalshi
+	FetchHours   float64  `toml:"fetch_hours"`    // poll each source at most this often
+	Polymarket   int      `toml:"polymarket"`     // open Polymarket markets kept, by 24h volume
+	KalshiPages  int      `toml:"kalshi_pages"`   // pages of 1000 open Kalshi markets read
+	MinVolume24h float64  `toml:"min_volume_24h"` // USD; quieter markets aren't stored (cards' markets always are)
+
+	NewsModel    string `toml:"news_model"`    // Claude model for the weekly news scan
+	NewsEvery    int    `toml:"news_every"`    // days between news scans
+	NewsCards    int    `toml:"news_cards"`    // narratives the scan proposes, at most
+	NewsMarkets  int    `toml:"news_markets"`  // prediction markets shown to the scan
+	NewsSearches int    `toml:"news_searches"` // web searches it may run
+	TradeNews    bool   `toml:"trade_news"`    // trade the news scan's cards too, not just narratives.toml
+
+	MinEdge           float64 `toml:"min_edge"`            // enter when our view is this far from the odds...
+	ExitEdge          float64 `toml:"exit_edge"`           // ...and leave once the gap is below this
+	MaxWeight         float64 `toml:"max_weight"`          // a gap or jump above this counts as this
+	JumpDays          int     `toml:"jump_days"`           // cards without a view follow an odds move over these days...
+	MinJump           float64 `toml:"min_jump"`            // ...of at least this many points (0.10 = 10)
+	JumpWeight        float64 `toml:"jump_weight"`         // a jump's weight next to a view's gap
+	Decided           float64 `toml:"decided"`             // odds this close to 0 or 1 count as settled: no trade
+	MaxNarrativeShare float64 `toml:"max_narrative_share"` // of equity, per narrative
+	MinADVNTD         float64 `toml:"min_adv_ntd"`         // NTD average traded value a stock needs...
+	ADVDays           int     `toml:"adv_days"`            // ...over this many trading days
+	StopLoss          float64 `toml:"stop_loss"`           // sell a holding this far below its cost
 }
 
 func (c Config) validate() error {

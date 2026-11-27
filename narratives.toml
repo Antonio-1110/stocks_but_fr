@@ -1,0 +1,75 @@
+# Hand-written narrative cards for the "narrative" paper portfolio (issue #95; settings in
+# radar.toml [narratives]). Edit freely: the next daily run picks changes up. The weekly news
+# scan (with the ANTHROPIC_API_KEY secret) adds its own cards on top; a card here wins an id clash.
+#
+# Each card:
+#   id        lowercase-with-dashes, stable (the page anchors on it)
+#   title     short name; claim: what "yes" means
+#   market    "polymarket:<slug>" or "kalshi:<ticker>" (see narratives.html for refs), or
+#   keywords  words the market's question must all contain; the busiest open match wins
+#   view      optional: OUR chance of yes, 0..1. With a view, the card trades when it is
+#             [narratives] min_edge or more from the odds, on the side the market underprices.
+#             Without one, it trades when the odds jump min_jump in jump_days, on the side they moved to.
+#   yes_tw    Taiwan tickers that gain if yes; no_tw: if no. These are what the portfolio buys.
+#   yes_us / no_us   US names, shown only
+#   why, wrong_if, catalyst (YYYY-MM-DD)   shown on the page
+#
+# Starter cards (2026-11-27). None has a view yet, so each follows big odds moves until you,
+# or the news scan, give it one.
+
+[[card]]
+id = "fed-hike-december"
+title = "Fed hikes 25 bp in December"
+claim = "The Fed raises the funds rate by 25 bp at the December 9, 2026 meeting."
+keywords = ["Fed", "increase", "25 bps", "December 2026"]
+catalyst = "2026-12-09"
+why = "Mid-November Polymarket priced a hike near 88% while Kalshi was nearer 70%. A hike widens Taiwan banks' and life insurers' spreads; no hike lifts long bonds and rate-sensitive tech."
+wrong_if = "Soft November CPI or payrolls, or Fed speakers walking back hike talk."
+yes_tw = ["2881", "2882", "2891", "2886"]   # 富邦金, 國泰金, 中信金, 兆豐金
+no_tw = ["00679B", "2454", "3661"]          # 元大美債20年, 聯發科, 世芯-KY
+yes_us = ["JPM", "BAC"]
+no_us = ["TLT", "QQQ"]
+
+[[card]]
+id = "huang-returns"
+title = "Jensen Huang returns to Nvidia"
+claim = "Jensen Huang rejoins Nvidia (as CEO or in a leading role) within the market's window."
+keywords = ["Jensen Huang", "rejoin"]
+why = "Huang resigned on Nov 12, 2026; the board said it won't reinstate him and hired a search firm. His return would lift confidence across Nvidia's Taiwan server and cooling supply chain."
+wrong_if = "A permanent CEO is named, or the board repeats it won't bring him back."
+yes_tw = ["2382", "3231", "6669", "2317", "3017", "2308"]   # 廣達, 緯創, 緯穎, 鴻海, 奇鋐, 台達電
+no_tw = []
+yes_us = ["NVDA"]
+
+[[card]]
+id = "nvidia-largest-company"
+title = "Nvidia stays the world's largest company"
+claim = "Nvidia is the largest company by market cap at the market's resolution date."
+keywords = ["NVIDIA", "largest company"]
+why = "A proxy for the AI-capex trade after the leadership change and November's tech sell-off (foreigners sold Taiwan tech hard). Rising odds favour AI server makers and their parts suppliers."
+wrong_if = "Hyperscalers cut 2027 capex guidance, or Nvidia's next guide disappoints."
+yes_tw = ["2330", "2382", "6669", "3017", "2383", "2368"]   # 台積電, 廣達, 緯穎, 奇鋐, 台光電, 金像電
+no_tw = []
+yes_us = ["NVDA", "AVGO"]
+
+[[card]]
+id = "us-recession"
+title = "US recession"
+claim = "The US enters a recession within the market's window."
+keywords = ["recession"]
+why = "Rate hikes into slowing growth raise recession risk. Rising odds favour defensives and long bonds; falling odds favour cyclicals."
+wrong_if = "Payrolls and ISM stay firm while inflation cools."
+yes_tw = ["2412", "00679B"]          # 中華電, 元大美債20年
+no_tw = ["2317", "2308", "2603"]     # 鴻海, 台達電, 長榮
+yes_us = ["TLT"]
+no_us = ["CAT"]
+
+[[card]]
+id = "china-taiwan-conflict"
+title = "China moves on Taiwan"
+claim = "China invades or blockades Taiwan within the market's window."
+keywords = ["China", "Taiwan", "invade"]
+why = "Tail risk for the whole market. Rising odds tend to lift Taiwan's defence names even as the index falls."
+wrong_if = "Cross-strait talks resume, or US-China tension eases."
+yes_tw = ["2634", "8033"]   # 漢翔, 雷虎
+no_tw = []

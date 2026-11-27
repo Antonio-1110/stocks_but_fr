@@ -21,6 +21,7 @@ import (
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/revenue"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/tw/valuation"
 	"github.com/Antonio-1110/stocks_but_fr/internal/market/us"
+	"github.com/Antonio-1110/stocks_but_fr/internal/narratives"
 	"github.com/Antonio-1110/stocks_but_fr/internal/paper"
 	"github.com/Antonio-1110/stocks_but_fr/internal/ratings"
 	"github.com/Antonio-1110/stocks_but_fr/internal/site"
@@ -48,7 +49,9 @@ var collectors = []step{
 	{"us-prices", us.Collect}, // issue #2: US large caps, own tables
 	{"ratings", ratings.Run},  // issue #78: rate stocks, score past ratings; after both markets' prices
 	{"alerts", alerts.Run},    // last: Telegram on stocks newly passing a rule, from the fresh data
-	{"paper", paper.Run},      // paper portfolios trade on the same fresh data
+	// issue #95: prediction-market odds and the weekly news scan, before paper
+	{"narratives", narratives.Collect},
+	{"paper", paper.Run}, // paper portfolios trade on the same fresh data
 }
 
 // renderers run in order on `radar render`.
@@ -60,6 +63,8 @@ var renderers = []step{
 	{"alpha", alpha.Render},       // after site: reuses its static/style.css
 	{"us", us.Render},             // after site: reuses its static/style.css
 	{"ratings", ratings.Render},   // after site: reuses its static/style.css
+	// issue #95; after site: reuses its static/style.css
+	{"narratives", narratives.Render},
 }
 
 func main() {
